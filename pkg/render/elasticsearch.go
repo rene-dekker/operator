@@ -182,34 +182,27 @@ func (es elasticsearchComponent) pvcTemplate() corev1.PersistentVolumeClaim {
 
 // Generate the pod template required for the ElasticSearch nodes (controls the ElasticSearch container)
 func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
-	// Setup default configuration for ES container
+	// Setup default configuration for ES container. For more information on managing resources, see:
+	// https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-managing-compute-resources.html and
+	// https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-jvm-heap-size.html#k8s-jvm-heap-size
+
 	esContainer := corev1.Container{
 		Name: "elasticsearch",
-		// Important note: Following Elastic ECK docs, the recommended practice is to set
-		// request and limit for memory to the same value:
-		// https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-managing-compute-resources.html#k8s-compute-resources-elasticsearch
-		//
-		// Default values for memory request and limit taken from ECK docs:
-		// https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-managing-compute-resources.html#k8s-default-behavior
 		Resources: corev1.ResourceRequirements{
 			Limits: corev1.ResourceList{
 				"cpu":    resource.MustParse("1"),
-				"memory": resource.MustParse("2Gi"),
+				"memory": resource.MustParse("4Gi"),
 			},
 			Requests: corev1.ResourceList{
-				"cpu":    resource.MustParse("1"),
-				"memory": resource.MustParse("2Gi"),
+				"cpu":    resource.MustParse("250m"),
+				"memory": resource.MustParse("4Gi"),
 			},
 		},
 		Env: []corev1.EnvVar{
-			// Important note: Following Elastic ECK docs, the recommendation is to set
-			// the Java heap size to half the size of RAM allocated to the Pod:
-			// https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-managing-compute-resources.html#k8s-compute-resources-elasticsearch
-			//
-			// Default values for Java Heap min and max taken from ECK docs:
-			// https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-jvm-heap-size.html#k8s-jvm-heap-size
-			{Name: "ES_JAVA_OPTS", Value: "-Xms1G -Xmx1G"},
+			// Set to 30% of the default memory, such that resources can be divided over ES, Lucene and ML.
+			{Name: "ES_JAVA_OPTS", Value: "-Xms1398101K -Xmx1398101K"},
 		},
+		Image: "gcr.io/unique-caldron-775/elastic:84",
 	}
 
 	// If the user has provided resource requirements, then use the user overrides instead
@@ -237,8 +230,27 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 		}
 	}
 
+	// https://www.elastic.co/guide/en/elasticsearch/reference/current/vm-max-map-count.html
+	trueBool := true
+	var user int64 = 0
+	initContainer := corev1.Container{
+		Name: "elastic-internal-init-os-settings",
+		SecurityContext: &corev1.SecurityContext{
+			Privileged: &trueBool,
+			RunAsUser:  &user,
+		},
+		Image: "docker.elastic.co/elasticsearch/elasticsearch:7.3.2",
+		Command: []string{
+			"echo",
+			"262144",
+			">",
+			"/proc/sys/vm/max_map_count",
+		},
+	}
+
 	podTemplate := corev1.PodTemplateSpec{
 		Spec: corev1.PodSpec{
+			InitContainers:   []corev1.Container{initContainer},
 			Containers:       []corev1.Container{esContainer},
 			ImagePullSecrets: getImagePullSecretReferenceList(es.pullSecrets),
 			NodeSelector:     es.logStorage.Spec.DataNodeSelector,
