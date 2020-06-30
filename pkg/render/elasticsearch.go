@@ -239,12 +239,13 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			Privileged: &trueBool,
 			RunAsUser:  &user,
 		},
-		Image: "docker.elastic.co/elasticsearch/elasticsearch:7.3.2",
+		Image: "gcr.io/unique-caldron-775/elastic:84",
 		Command: []string{
-			"echo",
-			"262144",
-			">",
-			"/proc/sys/vm/max_map_count",
+			"/bin/sh",
+		},
+		Args: []string{
+			"-c",
+			"echo 262144 > /proc/sys/vm/max_map_count",
 		},
 	}
 
