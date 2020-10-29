@@ -40,7 +40,7 @@ func GetReference(c component, registry, imagepath string) string {
 		case ComponentElasticsearchOperator:
 			registry = ECKRegistry
 		case ComponentDex:
-			registry = DexRegistry
+			registry = TigeraRegistry
 		default:
 			registry = TigeraRegistry
 		}
