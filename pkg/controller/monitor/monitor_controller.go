@@ -217,7 +217,12 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		r.status.SetDegraded("Error creating TLS certificate", err.Error())
 		return reconcile.Result{}, err
 	}
-
+	trustedBundle, err := utils.CreateTrustedBundle(tigeraCA)
+	if err != nil {
+		reqLogger.Error(err, "failed to create trusted certificate trustedBundle %s")
+		r.status.SetDegraded("failed to create trusted certificate trustedBundle %s", err.Error())
+		return reconcile.Result{}, err
+	}
 	if install.CertificateManagement != nil {
 		// Monitor pending CSRs for the TigeraStatus
 		r.status.AddCertificateSigningRequests(common.TigeraPrometheusNamespace, map[string]string{"k8s-app": common.TigeraPrometheusNamespace})
@@ -259,6 +264,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		KeyValidatorConfig:       keyValidatorConfig,
 		TLSSecret:                tlsSecret,
 		ClusterDomain:            r.clusterDomain,
+		TrustedBundle:            trustedBundle,
 	}
 
 	// Render prometheus component

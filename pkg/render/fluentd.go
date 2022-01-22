@@ -16,6 +16,7 @@ package render
 
 import (
 	"fmt"
+	"github.com/tigera/operator/pkg/tls"
 	"strconv"
 
 	"github.com/tigera/operator/pkg/url"
@@ -45,6 +46,7 @@ const (
 	S3FluentdSecretName                      = "log-collector-s3-credentials"
 	S3KeyIdName                              = "key-id"
 	S3KeySecretName                          = "key-secret"
+	FluentdTLSSecretName                     = "tigera-fluentd-tls"
 	filterHashAnnotation                     = "hash.operator.tigera.io/fluentd-filters"
 	s3CredentialHashAnnotation               = "hash.operator.tigera.io/s3-credentials"
 	splunkCredentialHashAnnotation           = "hash.operator.tigera.io/splunk-credentials"
@@ -136,6 +138,8 @@ type FluentdConfiguration struct {
 	Installation    *operatorv1.InstallationSpec
 	ClusterDomain   string
 	OSType          rmeta.OSType
+	KeyPair         tls.KeyPair
+	TrustedBundle   tls.TrustedBundle
 }
 
 type fluentdComponent struct {
@@ -260,6 +264,7 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 	objs = append(objs, c.fluentdServiceAccount())
 	objs = append(objs, c.packetCaptureApiRole(), c.packetCaptureApiRoleBinding())
 	objs = append(objs, c.daemonset())
+	objs = append(objs, c.cfg.TrustedBundle.ConfigMap(LogCollectorNamespace), c.cfg.KeyPair.Secret(LogCollectorNamespace))
 
 	return objs, nil
 }
@@ -495,9 +500,15 @@ func (c *fluentdComponent) container() corev1.Container {
 		volumeMounts = append(volumeMounts,
 			corev1.VolumeMount{
 				Name:      SplunkFluentdSecretsVolName,
-				MountPath: SplunkFluentdDefaultCertDir,
+				MountPath: c.path(SplunkFluentdDefaultCertDir),
 			})
 	}
+
+	bundle := c.cfg.TrustedBundle.VolumeMount()
+	bundle.MountPath = c.path(bundle.MountPath)
+	kp := c.cfg.KeyPair.VolumeMount(TLSMountPathBase)
+	kp.MountPath = c.path(kp.MountPath)
+	volumeMounts = append(volumeMounts, bundle, kp)
 
 	isPrivileged := false
 	//On OpenShift Fluentd needs privileged access to access logs on host path volume
@@ -711,6 +722,8 @@ func (c *fluentdComponent) volumes() []corev1.Volume {
 	dirOrCreate := corev1.HostPathDirectoryOrCreate
 
 	volumes := []corev1.Volume{
+		c.cfg.TrustedBundle.Volume(),
+		c.cfg.KeyPair.Volume(),
 		{
 			Name: "var-log-calico",
 			VolumeSource: corev1.VolumeSource{

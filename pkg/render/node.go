@@ -1306,6 +1306,11 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		extraNodeEnv := []corev1.EnvVar{
 			{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},
 			{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: fmt.Sprintf("%d", c.cfg.NodeReporterMetricsPort)},
+			// Use a TLS configuration for exposing the metrics.
+			{Name: "FELIX_PROMETHEUSREPORTERCERTFILE", Value: TLSCertMountPath},
+			{Name: "FELIX_PROMETHEUSREPORTERKEYFILE", Value: TLSKeyMountPath},
+			{Name: "FELIX_PROMETHEUSREPORTERCAFILE", Value: c.cfg.TLS.TrustedBundle.MountPath()},
+
 			{Name: "FELIX_FLOWLOGSFILEENABLED", Value: "true"},
 			{Name: "FELIX_FLOWLOGSFILEINCLUDELABELS", Value: "true"},
 			{Name: "FELIX_FLOWLOGSFILEINCLUDEPOLICIES", Value: "true"},
@@ -1408,7 +1413,7 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*corev1.Probe, *corev1.Pr
 
 	// Want to check for BGP metrics server if this is enterprise
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		readinessCmd = []string{"/bin/calico-node", "-bird-ready", "-felix-ready", "-bgp-metrics-ready"}
+		readinessCmd = []string{"/bin/calico-node", "-bird-ready", "-felix-ready"} // bgp-metrics-ready cmd cannot handle tls prometheus.
 	}
 
 	// If not using BGP or using VPP, don't check bird status (or bgp metrics server for enterprise).

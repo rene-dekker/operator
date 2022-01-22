@@ -17,10 +17,16 @@ package render_test
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/tigera/operator/pkg/apis"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/utils"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
+	"github.com/tigera/operator/pkg/tls"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/dns"
@@ -29,13 +35,23 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
+var _ = FDescribe("Tigera Secure Fluentd rendering tests", func() {
 	var esConfigMap *relasticsearch.ClusterConfig
 	var cfg *render.FluentdConfiguration
 
 	BeforeEach(func() {
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.
+		scheme := runtime.NewScheme()
+		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
+		tigeraCA, err := utils.CreateTigeraCA(cli, nil, clusterDomain)
+		Expect(err).NotTo(HaveOccurred())
+		bundle, err := utils.CreateTrustedBundle(tigeraCA)
+		Expect(err).NotTo(HaveOccurred())
+		keyPair, err := tigeraCA.GetOrCreateKeyPair(cli, render.FluentdTLSSecretName, common.OperatorNamespace(), []string{""})
+		Expect(err).NotTo(HaveOccurred())
+
 		esConfigMap = relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
 		cfg = &render.FluentdConfiguration{
 			LogCollector:    &operatorv1.LogCollector{},
@@ -45,6 +61,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			Installation: &operatorv1.InstallationSpec{
 				KubernetesProvider: operatorv1.ProviderNone,
 			},
+			TrustedBundle: bundle,
+			KeyPair:       keyPair,
 		}
 	})
 
@@ -63,7 +81,9 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{name: "fluentd-node", ns: "tigera-fluentd", group: "", version: "v1", kind: "ServiceAccount"},
 			{name: render.PacketCaptureAPIRole, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
 			{name: render.PacketCaptureAPIRoleBinding, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
-			{name: "fluentd-node", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "DaemonSet"},
+			{name: "fluentd-node", ns: render.LogCollectorNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
+			{name: tls.TrustedCertConfigMapName, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "ConfigMap"},
+			{name: render.FluentdTLSSecretName, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Secret"},
 		}
 
 		// Should render the correct resources.
@@ -78,7 +98,23 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 
 		ds := rtest.GetResource(resources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
-		Expect(ds.Spec.Template.Spec.Volumes[0].VolumeSource.HostPath.Path).To(Equal("/var/log/calico"))
+		Expect(ds.Spec.Template.Spec.Volumes[0].Name).To(Equal(tls.TrustedCertConfigMapName))
+		Expect(ds.Spec.Template.Spec.Volumes[0].ConfigMap.Name).To(Equal(tls.TrustedCertConfigMapName))
+		Expect(ds.Spec.Template.Spec.Volumes[1].Name).To(Equal(render.FluentdTLSSecretName))
+		Expect(ds.Spec.Template.Spec.Volumes[1].Secret.SecretName).To(Equal(render.FluentdTLSSecretName))
+		Expect(ds.Spec.Template.Spec.Volumes[2].VolumeSource.HostPath.Path).To(Equal("/var/log/calico"))
+		Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ContainElements(
+			corev1.VolumeMount{
+				Name:      tls.TrustedCertConfigMapName,
+				MountPath: tls.TrustedCertVolumeMountPath,
+				ReadOnly:  true,
+			},
+			corev1.VolumeMount{
+				Name:      render.FluentdTLSSecretName,
+				MountPath: render.TLSMountPathBase,
+				ReadOnly:  true,
+			}))
+
 		envs := ds.Spec.Template.Spec.Containers[0].Env
 
 		expectedEnvs := []corev1.EnvVar{
@@ -151,7 +187,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		Expect(rtest.GetResource(resources, "tigera-critical-pods", "tigera-fluentd", "", "v1", "ResourceQuota")).ToNot(BeNil())
 	})
 
-	It("should render for Windows nodes", func() {
+	FIt("should render for Windows nodes", func() {
 		expectedResources := []struct {
 			name    string
 			ns      string
@@ -164,6 +200,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{name: render.PacketCaptureAPIRole, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
 			{name: render.PacketCaptureAPIRoleBinding, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: "fluentd-node-windows", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "DaemonSet"},
+			{name: tls.TrustedCertConfigMapName, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "ConfigMap"},
+			{name: render.FluentdTLSSecretName, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Secret"},
 		}
 
 		cfg.OSType = rmeta.OSTypeWindows
@@ -179,7 +217,22 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 
 		ds := rtest.GetResource(resources, "fluentd-node-windows", "tigera-fluentd", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
-		Expect(ds.Spec.Template.Spec.Volumes[0].VolumeSource.HostPath.Path).To(Equal("c:/TigeraCalico"))
+		Expect(ds.Spec.Template.Spec.Volumes[0].Name).To(Equal(tls.TrustedCertConfigMapName))
+		Expect(ds.Spec.Template.Spec.Volumes[0].ConfigMap.Name).To(Equal(tls.TrustedCertConfigMapName))
+		Expect(ds.Spec.Template.Spec.Volumes[1].Name).To(Equal(render.FluentdTLSSecretName))
+		Expect(ds.Spec.Template.Spec.Volumes[1].Secret.SecretName).To(Equal(render.FluentdTLSSecretName))
+		Expect(ds.Spec.Template.Spec.Volumes[2].VolumeSource.HostPath.Path).To(Equal("c:/TigeraCalico"))
+		Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ContainElements(
+			corev1.VolumeMount{
+				Name:      tls.TrustedCertConfigMapName,
+				MountPath: "c:" + tls.TrustedCertVolumeMountPath,
+				ReadOnly:  true,
+			},
+			corev1.VolumeMount{
+				Name:      render.FluentdTLSSecretName,
+				MountPath: "c:" + render.TLSMountPathBase,
+				ReadOnly:  true,
+			}))
 
 		envs := ds.Spec.Template.Spec.Containers[0].Env
 
@@ -269,6 +322,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{name: render.PacketCaptureAPIRole, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
 			{name: render.PacketCaptureAPIRoleBinding, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: "fluentd-node", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "DaemonSet"},
+			{name: tls.TrustedCertConfigMapName, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "ConfigMap"},
+			{name: render.FluentdTLSSecretName, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Secret"},
 		}
 
 		// Should render the correct resources.
@@ -333,6 +388,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{name: render.PacketCaptureAPIRole, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
 			{name: render.PacketCaptureAPIRoleBinding, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: "fluentd-node", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "DaemonSet"},
+			{name: tls.TrustedCertConfigMapName, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "ConfigMap"},
+			{name: render.FluentdTLSSecretName, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Secret"},
 		}
 
 		var ps int32 = 180
@@ -429,6 +486,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{name: render.PacketCaptureAPIRole, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
 			{name: render.PacketCaptureAPIRoleBinding, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: "fluentd-node", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "DaemonSet"},
+			{name: tls.TrustedCertConfigMapName, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "ConfigMap"},
+			{name: render.FluentdTLSSecretName, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Secret"},
 		}
 
 		// Should render the correct resources.
@@ -512,6 +571,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{name: render.PacketCaptureAPIRole, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
 			{name: render.PacketCaptureAPIRoleBinding, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: "fluentd-node", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "DaemonSet"},
+			{name: tls.TrustedCertConfigMapName, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "ConfigMap"},
+			{name: render.FluentdTLSSecretName, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Secret"},
 		}
 
 		// Should render the correct resources.
@@ -583,6 +644,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{name: render.PacketCaptureAPIRole, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
 			{name: render.PacketCaptureAPIRoleBinding, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: "fluentd-node", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "DaemonSet"},
+			{name: tls.TrustedCertConfigMapName, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "ConfigMap"},
+			{name: render.FluentdTLSSecretName, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Secret"},
 		}
 
 		// Should render the correct resources.
@@ -627,6 +690,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{name: render.PacketCaptureAPIRoleBinding, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			// Daemonset
 			{name: "fluentd-node", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "DaemonSet"},
+			{name: tls.TrustedCertConfigMapName, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "ConfigMap"},
+			{name: render.FluentdTLSSecretName, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Secret"},
 		}
 
 		fetchInterval := int32(900)

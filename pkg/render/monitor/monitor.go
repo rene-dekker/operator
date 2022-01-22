@@ -81,6 +81,7 @@ type Config struct {
 	KeyValidatorConfig       authentication.KeyValidatorConfig
 	TLSSecret                tls.KeyPair
 	ClusterDomain            string
+	TrustedBundle            tls.TrustedBundle
 }
 
 type monitorComponent struct {
@@ -159,6 +160,7 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 		mc.prometheusHTTPAPIService(),
 		mc.clusterRole(),
 		mc.clusterRoleBinding(),
+		mc.cfg.TrustedBundle.ConfigMap(common.TigeraPrometheusNamespace),
 	)
 
 	if mc.cfg.KeyValidatorConfig != nil {
@@ -294,9 +296,11 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 	}
 	volumes := []corev1.Volume{
 		mc.cfg.TLSSecret.Volume(),
+		mc.cfg.TrustedBundle.Volume(),
 	}
 	volumeMounts := []corev1.VolumeMount{
 		mc.cfg.TLSSecret.VolumeMount("/tls"),
+		mc.cfg.TrustedBundle.VolumeMount(),
 	}
 
 	if mc.cfg.KeyValidatorConfig != nil {
@@ -316,6 +320,7 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 			ImagePullSecrets:   secret.GetReferenceList(mc.cfg.PullSecrets),
 			ServiceAccountName: prometheusServiceAccountName,
 			Volumes:            volumes,
+			VolumeMounts:       volumeMounts,
 			InitContainers:     initContainers,
 			Containers: []corev1.Container{
 				{
@@ -525,6 +530,12 @@ func (mc *monitorComponent) prometheusRule() *monitoringv1.PrometheusRule {
 }
 
 func (mc *monitorComponent) serviceMonitorCalicoNode() *monitoringv1.ServiceMonitor {
+	tlsConfig := &monitoringv1.TLSConfig{
+		CAFile:        tls.TrustedCertBundleMountPath,
+		CertFile:      "/tls/tls.crt",
+		KeyFile:       "/tls/tls.key",
+		SafeTLSConfig: monitoringv1.SafeTLSConfig{InsecureSkipVerify: true},
+	}
 	return &monitoringv1.ServiceMonitor{
 		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: MonitoringAPIVersion},
 		ObjectMeta: metav1.ObjectMeta{
@@ -541,12 +552,16 @@ func (mc *monitorComponent) serviceMonitorCalicoNode() *monitoringv1.ServiceMoni
 					Interval:      "5s",
 					Port:          "calico-metrics-port",
 					ScrapeTimeout: "5s",
+					Scheme:        "https",
+					TLSConfig:     tlsConfig,
 				},
 				{
 					HonorLabels:   true,
 					Interval:      "5s",
 					Port:          "calico-bgp-metrics-port",
 					ScrapeTimeout: "5s",
+					Scheme:        "https",
+					TLSConfig:     tlsConfig,
 				},
 			},
 		},

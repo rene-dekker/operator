@@ -17,6 +17,8 @@ package logcollector
 import (
 	"context"
 	"fmt"
+	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/tls"
 	"strings"
 	"time"
 
@@ -119,7 +121,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	for _, secretName := range []string{
 		render.ElasticsearchLogCollectorUserSecret, render.ElasticsearchEksLogForwarderUserSecret,
 		relasticsearch.PublicCertSecret, render.S3FluentdSecretName, render.EksLogForwarderSecret,
-		render.SplunkFluentdTokenSecretName, render.SplunkFluentdCertificateSecretName} {
+		render.SplunkFluentdTokenSecretName, render.SplunkFluentdCertificateSecretName, tls.TigeraCASecretName} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("log-collector-controller failed to watch the Secret resource(%s): %v", secretName, err)
 		}
@@ -278,6 +280,31 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		}
 		r.status.SetDegraded("Error querying installation", err.Error())
 		return reconcile.Result{}, err
+	}
+
+	tigeraCA, err := utils.CreateTigeraCA(r.client, installation.CertificateManagement, r.clusterDomain)
+	if err != nil {
+		log.Error(err, "unable to create the Tigera CA")
+		r.status.SetDegraded("unable to create the Tigera CA", err.Error())
+		return reconcile.Result{}, err
+	}
+	tlsKeyPair, err := tigeraCA.GetOrCreateKeyPair(r.client, render.FluentdTLSSecretName, common.OperatorNamespace(), dns.GetServiceDNSNames(render.FluentdTLSSecretName, render.LogCollectorNamespace, r.clusterDomain))
+	if err != nil {
+		log.Error(err, "Error creating TLS certificate")
+		r.status.SetDegraded("Error creating TLS certificate", err.Error())
+		return reconcile.Result{}, err
+	}
+	trustedBundle, err := utils.CreateTrustedBundle(tigeraCA)
+	if err != nil {
+		reqLogger.Error(err, "failed to create trusted certificate trustedBundle %s")
+		r.status.SetDegraded("failed to create trusted certificate trustedBundle %s", err.Error())
+		return reconcile.Result{}, err
+	}
+	if installation.CertificateManagement != nil {
+		// Monitor pending CSRs for the TigeraStatus
+		r.status.AddCertificateSigningRequests(render.LogCollectorNamespace, map[string]string{"k8s-app": render.LogCollectorNamespace})
+	} else {
+		r.status.RemoveCertificateSigningRequests(render.LogCollectorNamespace)
 	}
 
 	esClusterConfig, err := utils.GetElasticsearchClusterConfig(ctx, r.client)
@@ -465,6 +492,8 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			Installation:    installation,
 			ClusterDomain:   r.clusterDomain,
 			OSType:          rmeta.OSTypeWindows,
+			KeyPair:         tlsKeyPair,
+			TrustedBundle:   trustedBundle,
 		}
 		component = render.Fluentd(fluentdCfg)
 

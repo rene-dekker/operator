@@ -526,6 +526,14 @@ func (c *typhaComponent) typhaEnvVars() []corev1.EnvVar {
 			corev1.EnvVar{Name: "TYPHA_PROMETHEUSMETRICSENABLED", Value: "true"},
 			corev1.EnvVar{Name: "TYPHA_PROMETHEUSMETRICSPORT", Value: fmt.Sprintf("%d", *c.cfg.Installation.TyphaMetricsPort)},
 		)
+		if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+			// Use a TLS configuration for exposing the metrics.
+			typhaEnv = append(typhaEnv,
+				corev1.EnvVar{Name: "TYPHA_PROMETHEUSMETRICSCERTFILE", Value: TLSCertMountPath},
+				corev1.EnvVar{Name: "TYPHA_PROMETHEUSMETRICSKEYFILE", Value: TLSKeyMountPath},
+				corev1.EnvVar{Name: "TYPHA_PROMETHEUSMETRICSCAFILE", Value: c.cfg.TLS.TrustedBundle.MountPath()},
+			)
+		}
 	}
 
 	return typhaEnv
