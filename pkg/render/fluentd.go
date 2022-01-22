@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"github.com/tigera/operator/pkg/tls"
 	"strconv"
+	"strings"
 
 	"github.com/tigera/operator/pkg/url"
 
@@ -145,6 +146,7 @@ type FluentdConfiguration struct {
 type fluentdComponent struct {
 	cfg          *FluentdConfiguration
 	image        string
+	csrImage     string
 	probeTimeout int32
 	probePeriod  int32
 }
@@ -153,15 +155,26 @@ func (c *fluentdComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := c.cfg.Installation.Registry
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
-
+	errMsgs := []string{}
+	var err error
 	if c.cfg.OSType == rmeta.OSTypeWindows {
-		var err error
 		c.image, err = components.GetReference(components.ComponentFluentdWindows, reg, path, prefix, is)
-		return err
+		errMsgs = append(errMsgs, err.Error())
+	} else if c.cfg.Installation.CertificateManagement != nil {
+		c.csrImage, err = ResolveCSRInitImage(c.cfg.Installation, is)
+		if err != nil {
+			errMsgs = append(errMsgs, err.Error())
+		}
 	}
 
-	var err error
 	c.image, err = components.GetReference(components.ComponentFluentd, reg, path, prefix, is)
+	if err != nil {
+		errMsgs = append(errMsgs, err.Error())
+	}
+
+	if len(errMsgs) != 0 {
+		return fmt.Errorf(strings.Join(errMsgs, ","))
+	}
 	return err
 }
 
@@ -216,7 +229,7 @@ func (c *fluentdComponent) path(path string) string {
 }
 
 func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
-	var objs []client.Object
+	var objs, toDelete []client.Object
 	objs = append(objs,
 		CreateNamespace(
 			LogCollectorNamespace,
@@ -264,9 +277,18 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 	objs = append(objs, c.fluentdServiceAccount())
 	objs = append(objs, c.packetCaptureApiRole(), c.packetCaptureApiRoleBinding())
 	objs = append(objs, c.daemonset())
-	objs = append(objs, c.cfg.TrustedBundle.ConfigMap(LogCollectorNamespace), c.cfg.KeyPair.Secret(LogCollectorNamespace))
+	if c.cfg.TrustedBundle != nil && c.cfg.KeyPair != nil {
+		objs = append(objs, c.cfg.TrustedBundle.ConfigMap(LogCollectorNamespace), c.cfg.KeyPair.Secret(LogCollectorNamespace))
+		if c.cfg.KeyPair.UseCertificateManagement() {
+			objs = append(objs, CSRClusterRoleBinding(fluentdNodeName, LogCollectorNamespace))
+			toDelete = append(toDelete, c.cfg.KeyPair.Secret(LogCollectorNamespace))
+		} else {
+			objs = append(objs, c.cfg.KeyPair.Secret(LogCollectorNamespace))
+			toDelete = append(toDelete, CSRClusterRoleBinding(fluentdName, LogCollectorNamespace))
+		}
+	}
 
-	return objs, nil
+	return objs, toDelete
 }
 
 func (c *fluentdComponent) Ready() bool {
@@ -419,7 +441,10 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 	if c.cfg.Filters != nil {
 		annots[filterHashAnnotation] = rmeta.AnnotationHash(c.cfg.Filters)
 	}
-
+	var initContainers []corev1.Container
+	if c.cfg.Installation.CertificateManagement != nil {
+		initContainers = append(initContainers, c.cfg.KeyPair.InitContainer(LogCollectorNamespace, c.csrImage))
+	}
 	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels: map[string]string{
@@ -434,6 +459,7 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 			TerminationGracePeriodSeconds: &terminationGracePeriod,
 			Containers:                    []corev1.Container{c.container()},
 			Volumes:                       c.volumes(),
+			InitContainers:                initContainers,
 			ServiceAccountName:            c.fluentdNodeName(),
 		}),
 	}, c.cfg.ESClusterConfig, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
@@ -504,11 +530,13 @@ func (c *fluentdComponent) container() corev1.Container {
 			})
 	}
 
-	bundle := c.cfg.TrustedBundle.VolumeMount()
-	bundle.MountPath = c.path(bundle.MountPath)
-	kp := c.cfg.KeyPair.VolumeMount(TLSMountPathBase)
-	kp.MountPath = c.path(kp.MountPath)
-	volumeMounts = append(volumeMounts, bundle, kp)
+	if c.cfg.TrustedBundle != nil && c.cfg.KeyPair != nil {
+		bundle := c.cfg.TrustedBundle.VolumeMount()
+		bundle.MountPath = c.path(bundle.MountPath)
+		kp := c.cfg.KeyPair.VolumeMount(TLSMountPathBase)
+		kp.MountPath = c.path(kp.MountPath)
+		volumeMounts = append(volumeMounts, bundle, kp)
+	}
 
 	isPrivileged := false
 	//On OpenShift Fluentd needs privileged access to access logs on host path volume
@@ -517,8 +545,8 @@ func (c *fluentdComponent) container() corev1.Container {
 	}
 
 	return relasticsearch.ContainerDecorateENVVars(corev1.Container{
-		Name:            "fluentd",
-		Image:           c.image,
+		Name:  "fluentd",
+		Image: "gcr.io/tigera-dev/rd/tigera/fluentd:rene", ImagePullPolicy: "Always",
 		Env:             envs,
 		SecurityContext: &corev1.SecurityContext{Privileged: &isPrivileged},
 		VolumeMounts:    volumeMounts,
@@ -722,8 +750,6 @@ func (c *fluentdComponent) volumes() []corev1.Volume {
 	dirOrCreate := corev1.HostPathDirectoryOrCreate
 
 	volumes := []corev1.Volume{
-		c.cfg.TrustedBundle.Volume(),
-		c.cfg.KeyPair.Volume(),
 		{
 			Name: "var-log-calico",
 			VolumeSource: corev1.VolumeSource{
@@ -761,6 +787,12 @@ func (c *fluentdComponent) volumes() []corev1.Volume {
 					},
 				},
 			})
+	}
+
+	if c.cfg.TrustedBundle != nil && c.cfg.KeyPair != nil {
+		volumes = append(volumes,
+			c.cfg.TrustedBundle.Volume(),
+			c.cfg.KeyPair.Volume())
 	}
 
 	return volumes

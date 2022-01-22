@@ -458,9 +458,16 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		Installation:    installation,
 		ClusterDomain:   r.clusterDomain,
 		OSType:          rmeta.OSTypeLinux,
+		KeyPair:         tlsKeyPair,
+		TrustedBundle:   trustedBundle,
 	}
 	// Render the fluentd component for Linux
 	component := render.Fluentd(fluentdCfg)
+
+	components := []render.Component{component}
+	if !tlsKeyPair.BYO() {
+		components = append(components, utils.NewKeyPairPassthrough(tlsKeyPair))
+	}
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
 		reqLogger.Error(err, "Error with images from ImageSet")
@@ -492,11 +499,9 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			Installation:    installation,
 			ClusterDomain:   r.clusterDomain,
 			OSType:          rmeta.OSTypeWindows,
-			KeyPair:         tlsKeyPair,
-			TrustedBundle:   trustedBundle,
 		}
 		component = render.Fluentd(fluentdCfg)
-
+		components = append(components, component)
 		if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
 			reqLogger.Error(err, "Error with images from ImageSet")
 			r.status.SetDegraded("Error with images from ImageSet", err.Error())
@@ -505,9 +510,12 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 
 		// Create a component handler to manage the rendered component.
 		handler = utils.NewComponentHandler(log, r.client, r.scheme, instance)
+	}
 
+	components = append(components, component)
+	for _, component := range components {
 		if err := handler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
-			r.status.SetDegraded("Error creating / updating resource", err.Error())
+			r.status.SetDegraded("Error creating / updating / deleting resource", err.Error())
 			return reconcile.Result{}, err
 		}
 	}
