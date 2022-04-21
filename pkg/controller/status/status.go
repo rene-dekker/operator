@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -76,6 +76,7 @@ type StatusManager interface {
 	IsProgressing() bool
 	IsDegraded() bool
 	ReadyToMonitor()
+	Conditions() []operator.TigeraStatusCondition
 }
 
 type statusManager struct {
@@ -101,7 +102,7 @@ type statusManager struct {
 	// Keep track of currently calculated status.
 	progressing []string
 	failing     []string
-
+	conditions  []operator.TigeraStatusCondition
 	// readyToMonitor tells the status manager that it's ready to monitor the resources that it's been told to monitor,
 	// if there are any, and report statuses based on the state of those resources.
 	readyToMonitor bool
@@ -137,6 +138,11 @@ func New(client client.Client, component string, kubernetesVersion *common.Versi
 		kubernetesVersion:         kubernetesVersion,
 		crExists:                  crExists,
 	}
+}
+
+func (m *statusManager) Conditions() []operator.TigeraStatusCondition {
+	return m.sta
+
 }
 
 func (m *statusManager) updateStatus() {
@@ -714,6 +720,7 @@ func (m *statusManager) set(retry bool, conditions ...operator.TigeraStatusCondi
 		}
 	}
 	m.crExists = true
+	m.conditions = conditions
 }
 
 func (m *statusManager) setAvailable(reason, msg string) {

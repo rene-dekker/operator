@@ -742,6 +742,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	terminating := (instance.DeletionTimestamp != nil)
 	preDefaultPatchFrom := client.MergeFrom(instance.DeepCopy())
 
+	status.Conditions = r.status.Conditions()
+
 	// Mark CR found so we can report converter problems via tigerastatus
 	r.status.OnCRFound()
 
