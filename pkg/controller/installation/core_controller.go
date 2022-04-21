@@ -742,8 +742,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	terminating := (instance.DeletionTimestamp != nil)
 	preDefaultPatchFrom := client.MergeFrom(instance.DeepCopy())
 
-	status.Conditions = r.status.Conditions()
-
 	// Mark CR found so we can report converter problems via tigerastatus
 	r.status.OnCRFound()
 
@@ -751,7 +749,11 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		// update Installation resource with existing install if it exists.
 		nc, err := convert.NeedsConversion(ctx, r.client)
 		if err != nil {
+
+			// Before returning an error you always have the line below:
 			r.SetDegraded("Error checking for existing installation", err, reqLogger)
+			// And after that you need this line:
+			status.Conditions = r.status.Conditions()
 			return reconcile.Result{}, err
 		}
 		if nc {
@@ -1358,6 +1360,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		instance.Status.ImageSet = imageSet.Name
 	}
 	instance.Status.Computed = &instance.Spec
+	// And here we need to add the status too:
+	instance.Status.Conditions = r.status.Conditions()
 	if err = r.client.Status().Update(ctx, instance); err != nil {
 		return reconcile.Result{}, err
 	}
