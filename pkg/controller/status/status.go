@@ -141,8 +141,7 @@ func New(client client.Client, component string, kubernetesVersion *common.Versi
 }
 
 func (m *statusManager) Conditions() []operator.TigeraStatusCondition {
-	return m.sta
-
+	return m.conditions
 }
 
 func (m *statusManager) updateStatus() {
