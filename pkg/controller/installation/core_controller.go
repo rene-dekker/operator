@@ -754,6 +754,11 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			r.SetDegraded("Error checking for existing installation", err, reqLogger)
 			// And after that you need this line:
 			status.Conditions = r.status.Conditions()
+			// And then store the status to the datastore:
+			if err = r.client.Status().Update(ctx, instance); err != nil {
+				return reconcile.Result{}, err
+			}
+
 			return reconcile.Result{}, err
 		}
 		if nc {
