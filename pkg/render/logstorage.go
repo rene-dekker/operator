@@ -60,7 +60,7 @@ import (
 type ElasticsearchLicenseType string
 
 const (
-	ECKOperatorName         = "elastic-operator"
+	ECKOperatorName         = "tigera-eck-operator"
 	ECKOperatorNamespace    = "tigera-eck-operator"
 	ECKLicenseConfigMapName = "elastic-licensing"
 	ECKOperatorPolicyName   = networkpolicy.TigeraComponentPolicyPrefix + "elastic-operator-access"
@@ -1030,7 +1030,7 @@ func (es elasticsearchComponent) eckOperatorClusterRole() *rbacv1.ClusterRole {
 
 	return &rbacv1.ClusterRole{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "elastic-operator",
+			Name: ECKOperatorName,
 		},
 		Rules: rules,
 	}
@@ -1049,7 +1049,7 @@ func (es elasticsearchComponent) eckOperatorClusterRoleBinding() *rbacv1.Cluster
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      "elastic-operator",
+				Name:      ECKOperatorName,
 				Namespace: ECKOperatorNamespace,
 			},
 		},
@@ -1069,7 +1069,7 @@ func (es elasticsearchComponent) eckOperatorClusterAdminClusterRoleBinding() *rb
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      "elastic-operator",
+				Name:      ECKOperatorName,
 				Namespace: ECKOperatorNamespace,
 			},
 		},
@@ -1112,23 +1112,23 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 			Name:      ECKOperatorName,
 			Namespace: ECKOperatorNamespace,
 			Labels: map[string]string{
-				"control-plane": "elastic-operator",
-				"k8s-app":       "elastic-operator",
+				"control-plane": ECKOperatorName,
+				"k8s-app":       ECKOperatorName,
 			},
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"control-plane": "elastic-operator",
-					"k8s-app":       "elastic-operator",
+					"control-plane": ECKOperatorName,
+					"k8s-app":       ECKOperatorName,
 				},
 			},
 			ServiceName: ECKOperatorName,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
-						"control-plane": "elastic-operator",
-						"k8s-app":       "elastic-operator",
+						"control-plane": ECKOperatorName,
+						"k8s-app":       ECKOperatorName,
 					},
 					Annotations: map[string]string{
 						// Rename the fields "error" to "error.message" and "source" to "event.source"
@@ -1138,7 +1138,7 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 				},
 				Spec: corev1.PodSpec{
 					DNSPolicy:          corev1.DNSClusterFirst,
-					ServiceAccountName: "elastic-operator",
+					ServiceAccountName: ECKOperatorName,
 					ImagePullSecrets:   secret.GetReferenceList(es.cfg.PullSecrets),
 					HostNetwork:        false,
 					NodeSelector:       es.cfg.Installation.ControlPlaneNodeSelector,
