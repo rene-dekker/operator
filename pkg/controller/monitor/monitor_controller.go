@@ -60,12 +60,12 @@ const ResourceName = "monitor"
 var log = logf.Log.WithName("controller_monitor")
 
 func Add(mgr manager.Manager, opts options.AddOptions) error {
-	if !opts.EnterpriseCRDExists {
+	if !opts.MonitorCRDExists {
 		return nil
 	}
 
 	prometheusReady := &utils.ReadyFlag{}
-	tierWatchReady := &utils.ReadyFlag{}
+	tierWatchReady := &utils.ReadyFlag{} // if opts.EnterpriseCRD {
 
 	// Create the reconciler
 	reconciler := newReconciler(mgr, opts, prometheusReady, tierWatchReady)
@@ -92,7 +92,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	// Watch for changes to Tier, as its status is used as input to determine whether network policy should be reconciled by this controller.
-	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, controller, k8sClient, log, tierWatchReady)
+	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, controller, k8sClient, log, tierWatchReady) // if opts.EnterpriseCRD {
 
 	go utils.WaitToAddNetworkPolicyWatches(controller, k8sClient, log, policyNames)
 
@@ -310,7 +310,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
-	if !r.tierWatchReady.IsReady() {
+	if !r.tierWatchReady.IsReady() { // if opts.EnterpriseCRD {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tier watch to be established", nil, reqLogger)
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
@@ -356,6 +356,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		Openshift:                r.provider == operatorv1.ProviderOpenShift,
 		KubeControllerPort:       kubeControllersMetricsPort,
 		UsePSP:                   r.usePSP,
+		Summoner:                 true, // enterpriseCRDexists == false && monitorCRDExists == true. TODO: remove some alertmanager stuff.
 	}
 
 	// Render prometheus component

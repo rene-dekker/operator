@@ -1616,9 +1616,9 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		// Add in Calico Enterprise specific configuration.
 		extraNodeEnv := []corev1.EnvVar{
-			{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},
-			{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: fmt.Sprintf("%d", c.cfg.NodeReporterMetricsPort)},
-			{Name: "FELIX_FLOWLOGSFILEENABLED", Value: "true"},
+			{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},                                        // TODO:  this needs to be enabled.
+			{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: fmt.Sprintf("%d", c.cfg.NodeReporterMetricsPort)}, // TODO:  this needs to be enabled.
+			{Name: "FELIX_FLOWLOGSFILEENABLED", Value: "true"},                                              // TODO:  this needs to be enabled.
 			{Name: "FELIX_FLOWLOGSFILEINCLUDELABELS", Value: "true"},
 			{Name: "FELIX_FLOWLOGSFILEINCLUDEPOLICIES", Value: "true"},
 			{Name: "FELIX_FLOWLOGSFILEINCLUDESERVICE", Value: "true"},

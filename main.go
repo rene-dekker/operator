@@ -304,6 +304,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	monitorCRDExists, err := utils.RequiresAmazonController(mgr.GetConfig())
+	if err != nil {
+		setupLog.Error(err, "Failed to determine if AmazonCloudIntegration is required")
+		os.Exit(1)
+	}
+
 	clusterDomain, err := dns.GetClusterDomain(dns.DefaultResolveConfPath)
 	if err != nil {
 		clusterDomain = dns.DefaultClusterDomain
@@ -321,6 +327,7 @@ func main() {
 		EnterpriseCRDExists: enterpriseCRDExists,
 		UsePSP:              usePSP,
 		AmazonCRDExists:     amazonCRDExists,
+		MonitorCRDExists:    monitorCRDExists,
 		ClusterDomain:       clusterDomain,
 		KubernetesVersion:   kubernetesVersion,
 		ManageCRDs:          manageCRDs,

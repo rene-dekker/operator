@@ -27,7 +27,8 @@ import (
 // reconciliation loops.
 type AddOptions struct {
 	DetectedProvider    v1.Provider
-	EnterpriseCRDExists bool
+	EnterpriseCRDExists bool // <== We need similar option whether Monitor CRD exists.
+	MonitorCRDExists    bool // <== We need similar option whether Monitor CRD exists.
 	AmazonCRDExists     bool
 	ClusterDomain       string
 	KubernetesVersion   *common.VersionInfo

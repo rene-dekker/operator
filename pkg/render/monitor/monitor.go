@@ -129,6 +129,7 @@ type Config struct {
 	Openshift                bool
 	KubeControllerPort       int
 	UsePSP                   bool
+	Summoner                 bool
 }
 
 type monitorComponent struct {
@@ -200,17 +201,17 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 		mc.prometheusClusterRole(),
 		mc.prometheusClusterRoleBinding(),
 		mc.prometheus(),
-		mc.alertmanagerService(),
-		mc.alertmanager(),
+		mc.alertmanagerService(), // <=== disable
+		mc.alertmanager(),        // <=== disable
 		mc.prometheusServiceService(),
 		mc.prometheusServiceClusterRole(),
 		mc.prometheusServiceClusterRoleBinding(),
-		mc.prometheusRule(),
+		mc.prometheusRule(), // <=== disable
 		mc.serviceMonitorCalicoNode(),
-		mc.serviceMonitorElasticsearch(),
-		mc.serviceMonitorFluentd(),
-		mc.serviceMonitorQueryServer(),
-		mc.serviceMonitorCalicoKubeControllers(),
+		mc.serviceMonitorElasticsearch(),         // <=== disable
+		mc.serviceMonitorFluentd(),               // <=== disable
+		mc.serviceMonitorQueryServer(),           // <=== disable
+		mc.serviceMonitorCalicoKubeControllers(), // <=== disable
 	)
 
 	if mc.cfg.KeyValidatorConfig != nil {
@@ -754,6 +755,8 @@ func (mc *monitorComponent) serviceMonitorCalicoNode() *monitoringv1.ServiceMoni
 					Scheme:        "https",
 					TLSConfig:     mc.tlsConfig(render.CalicoNodeMetricsService),
 				},
+
+				/// <== TODO: disable if mc.Summoner = true.
 				{
 					HonorLabels:   true,
 					Interval:      "5s",

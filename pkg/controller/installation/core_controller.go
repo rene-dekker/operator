@@ -142,6 +142,10 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	// Established deferred watches against the v3 API that should succeed after the Enterprise API Server becomes available.
 	if opts.EnterpriseCRDExists {
+		// watch monitor CR
+
+	}
+	if opts.EnterpriseCRDExists {
 		k8sClient, err := kubernetes.NewForConfig(mgr.GetConfig())
 		if err != nil {
 			log.Error(err, "Failed to establish a connection to k8s")
@@ -199,6 +203,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 		calicoWindowsUpgrader: calicoWindowsUpgrader,
 		namespaceMigration:    nm,
 		amazonCRDExists:       opts.AmazonCRDExists,
+		monitorCRDExists:      opts.MonitorCRDExists,
 		enterpriseCRDsExist:   opts.EnterpriseCRDExists,
 		clusterDomain:         opts.ClusterDomain,
 		manageCRDs:            opts.ManageCRDs,
@@ -386,6 +391,7 @@ type ReconcileInstallation struct {
 	namespaceMigration    migration.NamespaceMigration
 	enterpriseCRDsExist   bool
 	amazonCRDExists       bool
+	monitorCRDExists      bool
 	migrationChecked      bool
 	clusterDomain         string
 	manageCRDs            bool
@@ -1141,7 +1147,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	nodeReporterMetricsPort := defaultNodeReporterPort
 	var nodePrometheusTLS certificatemanagement.KeyPairInterface
 	calicoVersion := components.CalicoRelease
-	if instance.Spec.Variant == operator.TigeraSecureEnterprise {
+
+	if r.MonitorCRDExists {
+		// <= Change this so nodePrometheusTLS is created when the Monitor CRD exists.
 
 		// Determine the port to use for nodeReporter metrics.
 		if felixConfiguration.Spec.PrometheusReporterPort != nil {
@@ -1170,7 +1178,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		if prometheusClientCert != nil {
 			typhaNodeTLS.TrustedBundle.AddCertificates(prometheusClientCert)
 		}
-
+	}
+	if instance.Spec.Variant == operator.TigeraSecureEnterprise {
 		// es-kube-controllers needs to trust the ESGW certificate. We'll fetch it here and add it to the trusted bundle.
 		// Note that although we're adding this to the typhaNodeTLS trusted bundle, it will be used by es-kube-controllers. This is because
 		// all components within this namespace share a trusted CA bundle.
