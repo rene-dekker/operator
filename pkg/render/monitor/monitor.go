@@ -118,6 +118,7 @@ func MonitorPolicy(cfg *Config) render.Component {
 
 // Config contains all the config information needed to render the Monitor component.
 type Config struct {
+	Monitor                  operatorv1.MonitorSpec
 	Installation             *operatorv1.InstallationSpec
 	PullSecrets              []*corev1.Secret
 	AlertmanagerConfigSecret *corev1.Secret

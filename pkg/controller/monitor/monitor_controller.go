@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"reflect"
 
+	v1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -225,6 +226,14 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 	}
 
+	// Set the defaults in the Monitor resource.
+	fillDefaults(instance)
+
+	err = validateMonitorResource(instance)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, err.Error(), err, reqLogger)
+		return reconcile.Result{}, err
+	}
 	variant, install, err := utils.GetInstallation(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -344,6 +353,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	monitorCfg := &monitor.Config{
+		Monitor:                  instance.Spec,
 		Installation:             install,
 		PullSecrets:              pullSecrets,
 		AlertmanagerConfigSecret: alertmanagerConfigSecret,
@@ -412,6 +422,54 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	return reconcile.Result{}, nil
+}
+
+func validateMonitorResource(instance *operatorv1.Monitor) error {
+	if instance.Spec.ExternalPrometheusConfiguration != nil && instance.Spec.ExternalPrometheusConfiguration.ServiceMonitor != nil {
+		if instance.Spec.ExternalPrometheusConfiguration.Namespace != instance.Spec.ExternalPrometheusConfiguration.Namespace {
+			return fmt.Errorf("invalid Monitor resource: Spec.ExternalPrometheusConfiguration.Namespace must be equal to Spec.ExternalPrometheusConfiguration.Namespace")
+		}
+	}
+	return nil
+}
+
+func fillDefaults(instance *operatorv1.Monitor) {
+	if instance.Spec.ExternalPrometheusConfiguration == nil {
+		return
+	}
+	if instance.Spec.ExternalPrometheusConfiguration.Namespace == "" {
+		instance.Spec.ExternalPrometheusConfiguration.Namespace = "default"
+	}
+	if instance.Spec.ExternalPrometheusConfiguration.ServiceMonitor == nil {
+		return
+	}
+	if instance.Spec.ExternalPrometheusConfiguration.ServiceMonitor.ObjectMeta.Namespace == "" {
+		instance.Spec.ExternalPrometheusConfiguration.ServiceMonitor.Namespace = instance.Spec.ExternalPrometheusConfiguration.Namespace
+	}
+	if instance.Spec.ExternalPrometheusConfiguration.ServiceMonitor.ObjectMeta.Name == "" {
+		instance.Spec.ExternalPrometheusConfiguration.ServiceMonitor.ObjectMeta.Name = "tigera-prometheus"
+	}
+	if len(instance.Spec.ExternalPrometheusConfiguration.ServiceMonitor.Spec.Endpoints) == 0 {
+		instance.Spec.ExternalPrometheusConfiguration.ServiceMonitor.Spec.Endpoints = []v1.Endpoint{
+			{
+				Interval:    "30s",
+				Path:        "/federate",
+				Port:        "web",
+				HonorLabels: true,
+				Scheme:      "https",
+				Params: map[string][]string{
+					"'match[]'": {"'{__name__=~\".+\"}'"},
+				},
+				BearerTokenSecret: corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: "tigera-prometheus",
+					},
+					Key: "token",
+				},
+			},
+		}
+	}
+	return
 }
 
 //go:embed alertmanager-config.yaml

@@ -17,11 +17,32 @@ limitations under the License.
 package v1
 
 import (
+	v1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // MonitorSpec defines the desired state of Tigera monitor.
 type MonitorSpec struct {
+	// ExternalPrometheusConfiguration if not nil, the operator will create a ServiceMonitor and/or other resources in
+	// the namespace for your convenience. For example, this makes it possible to configure scraping from git-ops tools,
+	// without needing extra tools.
+	ExternalPrometheusConfiguration *ExternalPrometheusConfiguration `json:"externalPrometheusConfiguration,omitempty"`
+}
+
+type ExternalPrometheusConfiguration struct {
+	// ServiceMonitor if not nil, the operator will create a ServiceMonitor object in the namespace. It is important
+	// that you configure metadata.labels if you want your prometheus instance to pick up the configuration automatically.
+	// The operator will configure 1 endpoint by default:
+	// - Params to scrape all metrics available in Calico Enterprise.
+	// - BearerTokenSecret (If not overridden, the operator will also create corresponding RBAC that allows authz to the metrics.)
+	// - TLSConfig, containing the caFile and serverName.
+	// All values can be overridden.
+	// +optional
+	ServiceMonitor *v1.ServiceMonitor `json:"serviceMonitor,omitempty"`
+
+	// Namespace is the namespace where the operator will create resources for your Prometheus instance.
+	// Default: default
+	Namespace string `json:"namespace"`
 }
 
 // MonitorStatus defines the observed state of Tigera monitor.
