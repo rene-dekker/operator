@@ -114,8 +114,8 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, prometheusReady
 	}
 
 	r.status.AddStatefulSets([]types.NamespacedName{
-		{Namespace: common.TigeraPrometheusNamespace, Name: fmt.Sprintf("alertmanager-%s", monitor.CalicoNodeAlertmanager)},
-		{Namespace: common.TigeraPrometheusNamespace, Name: fmt.Sprintf("prometheus-%s", monitor.CalicoNodePrometheus)},
+		{Namespace: common.TigeraPrometheusNamespace, Name: fmt.Sprintf("alertmanager-%s", monitor.TigeraAlertmanager)},
+		{Namespace: common.TigeraPrometheusNamespace, Name: fmt.Sprintf("prometheus-%s", monitor.TigeraPrometheusObjectName)},
 	})
 
 	r.status.Run(opts.ShutdownContext)
@@ -147,7 +147,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	for _, secret := range []string{
 		certificatemanagement.CASecretName,
 		esmetrics.ElasticsearchMetricsServerTLSSecret,
-		monitor.PrometheusTLSSecretName,
+		monitor.PrometheusServerTLSSecretName,
 		render.FluentdPrometheusTLSSecretName,
 		render.NodePrometheusTLSServerSecret,
 		kubecontrollers.KubeControllerPrometheusTLSSecret,
@@ -225,15 +225,21 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 			return reconcile.Result{}, err
 		}
 	}
-
+	preDefaultPatchFrom := client.MergeFrom(instance.DeepCopy())
 	// Set the defaults in the Monitor resource.
 	fillDefaults(instance)
 
 	err = validateMonitorResource(instance)
 	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, err.Error(), err, reqLogger)
+		r.status.SetDegraded(operatorv1.InvalidConfigurationError, err.Error(), err, reqLogger)
 		return reconcile.Result{}, err
 	}
+	// Patch the monitor resource with defaults added.
+	if err := r.client.Patch(ctx, instance, preDefaultPatchFrom); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to write defaults", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	variant, install, err := utils.GetInstallation(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -270,7 +276,10 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	serverTLSSecret, err := certificateManager.GetOrCreateKeyPair(r.client, monitor.PrometheusTLSSecretName, common.OperatorNamespace(), dns.GetServiceDNSNames(monitor.PrometheusServiceServiceName, common.TigeraPrometheusNamespace, r.clusterDomain))
+
+	dnsNames := dns.GetServiceDNSNames(monitor.TigeraPrometheusObjectName, common.TigeraPrometheusNamespace, r.clusterDomain)
+	dnsNames = append(dnsNames, dns.GetServiceDNSNames("prometheus-http-api", common.TigeraPrometheusNamespace, r.clusterDomain)...) // To preserve the legacy dns names for skewed mcm setups.
+	serverTLSSecret, err := certificateManager.GetOrCreateKeyPair(r.client, monitor.PrometheusServerTLSSecretName, common.OperatorNamespace(), dnsNames)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
 		return reconcile.Result{}, err
@@ -372,7 +381,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		monitor.Monitor(monitorCfg),
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 			Namespace:       common.TigeraPrometheusNamespace,
-			ServiceAccounts: []string{monitor.PrometheusServiceAccountName},
+			ServiceAccounts: []string{monitor.TigeraPrometheusObjectName},
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				rcertificatemanagement.NewKeyPairOption(serverTLSSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(clientTLSSecret, true, true),
@@ -452,22 +461,52 @@ func fillDefaults(instance *operatorv1.Monitor) {
 	if len(instance.Spec.ExternalPrometheusConfiguration.ServiceMonitor.Spec.Endpoints) == 0 {
 		instance.Spec.ExternalPrometheusConfiguration.ServiceMonitor.Spec.Endpoints = []v1.Endpoint{
 			{
-				Interval:    "30s",
-				Path:        "/federate",
-				Port:        "web",
-				HonorLabels: true,
-				Scheme:      "https",
+				Port:   "web",
+				Path:   "/federate",
+				Scheme: "https",
 				Params: map[string][]string{
-					"'match[]'": {"'{__name__=~\".+\"}'"},
+					"match[]": {"{__name__=~\".+\"}"},
+				},
+				Interval:      "30s",
+				ScrapeTimeout: "",
+				TLSConfig: &v1.TLSConfig{
+					SafeTLSConfig: v1.SafeTLSConfig{
+						Cert: v1.SecretOrConfigMap{
+							Secret: nil,
+							ConfigMap: &corev1.ConfigMapKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: monitor.TigeraPrometheusObjectName,
+								},
+								Key:      corev1.TLSCertKey,
+								Optional: nil,
+							},
+						},
+						KeySecret:          nil,
+						ServerName:         "",
+						InsecureSkipVerify: false,
+					},
 				},
 				BearerTokenSecret: corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: "tigera-prometheus",
+						Name: monitor.TigeraPrometheusObjectName,
 					},
 					Key: "token",
 				},
 			},
 		}
+	}
+	instance.Spec.ExternalPrometheusConfiguration.ServiceMonitor.Spec.NamespaceSelector = v1.NamespaceSelector{
+		MatchNames: []string{monitor.TigeraPrometheusObjectName},
+	}
+	instance.Spec.ExternalPrometheusConfiguration.ServiceMonitor.Spec.Selector = metav1.LabelSelector{
+		MatchLabels: map[string]string{
+			"k8s-app": monitor.TigeraPrometheusObjectName,
+		},
+	}
+
+	instance.Spec.ExternalPrometheusConfiguration.ServiceMonitor.ObjectMeta = metav1.ObjectMeta{
+		Name:   "tigera-prometheus",
+		Labels: map[string]string{"app": "tigera-prometheus"},
 	}
 	return
 }
@@ -504,7 +543,8 @@ func (r *ReconcileMonitor) readAlertmanagerConfigSecret(ctx context.Context) (*c
 			Namespace: common.OperatorNamespace(),
 		},
 		Data: map[string][]byte{
-			"alertmanager.yaml": []byte(alertmanagerConfig),
+			"alertmanager.yaml":  []byte(alertmanagerConfig),
+			"alertmanagesr.yaml": []byte(alertmanagerConfig),
 		},
 	}
 

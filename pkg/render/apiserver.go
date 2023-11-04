@@ -1522,7 +1522,7 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 			APIGroups: []string{""},
 			Resources: []string{"services/proxy"},
 			ResourceNames: []string{
-				"https:tigera-api:8080", "calico-node-prometheus:9090",
+				"https:tigera-api:8080", "https:tigera-prometheus:9090",
 			},
 			Verbs: []string{"get", "create"},
 		},
@@ -1683,7 +1683,7 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 			APIGroups: []string{""},
 			Resources: []string{"services/proxy"},
 			ResourceNames: []string{
-				"https:tigera-api:8080", "calico-node-prometheus:9090",
+				"https:tigera-api:8080", "https:tigera-prometheus:9090",
 			},
 			Verbs: []string{"get", "create"},
 		},

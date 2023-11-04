@@ -35,7 +35,6 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/authentication"
 	"github.com/tigera/operator/pkg/render/common/configmap"
@@ -50,39 +49,41 @@ import (
 )
 
 const (
-	MonitoringAPIVersion   = "monitoring.coreos.com/v1"
-	CalicoNodeAlertmanager = "calico-node-alertmanager"
-	CalicoNodeMonitor      = "calico-node-monitor"
-	CalicoNodePrometheus   = "calico-node-prometheus"
+	MonitoringAPIVersion = "monitoring.coreos.com/v1"
+	TigeraAlertmanager   = "tigera-alertmanager"
+	CalicoNodeMonitor    = "calico-node-monitor"
 
+	// CalicoPrometheusOperator is the name for objects related to the Prometheus operator instance.
 	CalicoPrometheusOperator = "calico-prometheus-operator"
 
+	// TigeraPrometheusObjectName is the name for objects related to the Prometheus instance.
 	TigeraPrometheusObjectName            = "tigera-prometheus"
 	TigeraPrometheusDPRate                = "tigera-prometheus-dp-rate"
-	TigeraPrometheusRole                  = "tigera-prometheus-role"
-	TigeraPrometheusRoleBinding           = "tigera-prometheus-role-binding"
+	TigeraPrometheusOperatorRole          = "tigera-prometheus-operator"
+	TigeraPrometheusOperatorRoleBinding   = "tigera-prometheus-operator"
 	TigeraPrometheusPodSecurityPolicyName = "tigera-prometheus"
 
-	PrometheusAPIPolicyName       = networkpolicy.TigeraComponentPolicyPrefix + "tigera-prometheus-api"
-	PrometheusClientTLSSecretName = "calico-node-prometheus-client-tls"
-	PrometheusClusterRoleName     = "prometheus"
+	PrometheusAPIPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "tigera-prometheus-api"
+
+	// PrometheusClientTLSSecretName is the TLS secret used when tigera-prometheus is acting as a client and scrapes the
+	// metrics endpoint of other services.
+	PrometheusClientTLSSecretName = "tigera-prometheus-client-tls"
+	// PrometheusServerTLSSecretName is the TLS secret used when the authentication proxy container in tigera-prometheus
+	// is acting as a server and handles incoming requests.
+	PrometheusServerTLSSecretName = "tigera-prometheus-server-tls"
 	PrometheusDefaultPort         = 9090
-	PrometheusServiceServiceName  = "prometheus-http-api"
 	PrometheusOperatorPolicyName  = networkpolicy.TigeraComponentPolicyPrefix + "prometheus-operator"
 	PrometheusPolicyName          = networkpolicy.TigeraComponentPolicyPrefix + "prometheus"
 	PrometheusProxyPort           = 9095
-	PrometheusServiceAccountName  = "prometheus"
-	PrometheusTLSSecretName       = "calico-node-prometheus-tls"
 
-	AlertManagerPolicyName     = networkpolicy.TigeraComponentPolicyPrefix + CalicoNodeAlertmanager
-	AlertmanagerConfigSecret   = "alertmanager-calico-node-alertmanager"
+	AlertManagerPolicyName     = networkpolicy.TigeraComponentPolicyPrefix + TigeraAlertmanager
+	AlertmanagerConfigSecret   = "alertmanager-tigera-alertmanager"
 	AlertmanagerPort           = 9093
 	MeshAlertManagerPolicyName = AlertManagerPolicyName + "-mesh"
 
 	ElasticsearchMetrics = "elasticsearch-metrics"
 	FluentdMetrics       = "fluentd-metrics"
 
-	calicoNodePrometheusServiceName       = "calico-node-prometheus"
 	tigeraPrometheusServiceHealthEndpoint = "/health"
 
 	bearerTokenFile       = "/var/run/secrets/kubernetes.io/serviceaccount/token"
@@ -91,7 +92,7 @@ const (
 
 var alertManagerSelector = fmt.Sprintf(
 	"(app == 'alertmanager' && alertmanager == '%[1]s') || (app.kubernetes.io/name == 'alertmanager' && alertmanager == '%[1]s')",
-	CalicoNodeAlertmanager,
+	TigeraAlertmanager,
 )
 
 // Register secret/certs that need Server and Client Key usage
@@ -204,6 +205,7 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 		mc.alertmanagerService(),
 		mc.alertmanager(),
 		mc.prometheusServiceService(),
+		mc.prometheusServiceServiceLegacy(),
 		mc.prometheusServiceClusterRole(),
 		mc.prometheusServiceClusterRoleBinding(),
 		mc.prometheusRule(),
@@ -221,6 +223,22 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 
 	if mc.cfg.UsePSP {
 		toCreate = append(toCreate, mc.prometheusOperatorPodSecurityPolicy())
+	}
+	if mc.cfg.Monitor.ExternalPrometheusConfiguration != nil {
+		toCreate = append(toCreate, render.CreateCertificateConfigMap(string(mc.cfg.ServerTLSSecret.GetCertificatePEM()), TigeraPrometheusObjectName, mc.cfg.Monitor.ExternalPrometheusConfiguration.Namespace))
+		if mc.cfg.Monitor.ExternalPrometheusConfiguration.ServiceMonitor != nil {
+			toCreate = append(toCreate, mc.cfg.Monitor.ExternalPrometheusConfiguration.ServiceMonitor)
+			var needsRBAC bool
+			for _, ep := range mc.cfg.Monitor.ExternalPrometheusConfiguration.ServiceMonitor.Spec.Endpoints {
+				if ep.BearerTokenSecret.LocalObjectReference.Name == TigeraPrometheusObjectName {
+					needsRBAC = true
+					break
+				}
+			}
+			if needsRBAC {
+				toCreate = append(toCreate, mc.ExternalPrometheusRole(), mc.ExternalPrometheusRoleBinding(), mc.ExternalPrometheusTokenSecret())
+			}
+		}
 	}
 
 	var toDelete []client.Object
@@ -374,7 +392,7 @@ func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
 	return &monitoringv1.Alertmanager{
 		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.AlertmanagersKind, APIVersion: MonitoringAPIVersion},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      CalicoNodeAlertmanager,
+			Name:      TigeraAlertmanager,
 			Namespace: common.TigeraPrometheusNamespace,
 		},
 		Spec: monitoringv1.AlertmanagerSpec{
@@ -382,9 +400,9 @@ func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
 			ImagePullPolicy:    render.ImagePullPolicy(),
 			ImagePullSecrets:   secret.GetReferenceList(mc.cfg.PullSecrets),
 			NodeSelector:       mc.cfg.Installation.ControlPlaneNodeSelector,
-			Replicas:           ptr.Int32ToPtr(3),
+			Replicas:           mc.cfg.Installation.ControlPlaneReplicas,
 			SecurityContext:    securitycontext.NewNonRootPodContext(),
-			ServiceAccountName: PrometheusServiceAccountName,
+			ServiceAccountName: TigeraPrometheusObjectName,
 			Tolerations:        mc.cfg.Installation.ControlPlaneTolerations,
 			Version:            components.ComponentCoreOSAlertmanager.Version,
 		},
@@ -395,7 +413,7 @@ func (mc *monitorComponent) alertmanagerService() *corev1.Service {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      CalicoNodeAlertmanager,
+			Name:      TigeraAlertmanager,
 			Namespace: common.TigeraPrometheusNamespace,
 		},
 		Spec: corev1.ServiceSpec{
@@ -408,7 +426,7 @@ func (mc *monitorComponent) alertmanagerService() *corev1.Service {
 				},
 			},
 			Selector: map[string]string{
-				"alertmanager": CalicoNodeAlertmanager,
+				"alertmanager": TigeraAlertmanager,
 			},
 		},
 	}
@@ -478,11 +496,16 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 	return &monitoringv1.Prometheus{
 		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.PrometheusesKind, APIVersion: MonitoringAPIVersion},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      CalicoNodePrometheus,
+			Name:      TigeraPrometheusObjectName,
 			Namespace: common.TigeraPrometheusNamespace,
 		},
 		Spec: monitoringv1.PrometheusSpec{
 			CommonPrometheusFields: monitoringv1.CommonPrometheusFields{
+				PodMetadata: &monitoringv1.EmbeddedObjectMetadata{
+					Labels: map[string]string{
+						"k8s-app": "tigera-prometheus",
+					},
+				},
 				Containers: []corev1.Container{
 					{
 						Name:            "authn-proxy",
@@ -527,7 +550,7 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 				PodMonitorSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"team": "network-operators"}},
 				Resources:              corev1.ResourceRequirements{Requests: corev1.ResourceList{"memory": resource.MustParse("400Mi")}},
 				SecurityContext:        securitycontext.NewNonRootPodContext(),
-				ServiceAccountName:     PrometheusServiceAccountName,
+				ServiceAccountName:     TigeraPrometheusObjectName,
 				ServiceMonitorSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"team": "network-operators"}},
 				Tolerations:            mc.cfg.Installation.ControlPlaneTolerations,
 				Version:                components.ComponentCoreOSPrometheus.Version,
@@ -537,7 +560,7 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 			Alerting: &monitoringv1.AlertingSpec{
 				Alertmanagers: []monitoringv1.AlertmanagerEndpoints{
 					{
-						Name:      CalicoNodeAlertmanager,
+						Name:      TigeraAlertmanager,
 						Namespace: common.TigeraPrometheusNamespace,
 						Port:      intstr.FromString("web"),
 						Scheme:    string(corev1.URISchemeHTTP),
@@ -546,7 +569,7 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 			},
 			Retention: "24h",
 			RuleSelector: &metav1.LabelSelector{MatchLabels: map[string]string{
-				"prometheus": CalicoNodePrometheus,
+				"prometheus": TigeraPrometheusObjectName,
 				"role":       "tigera-prometheus-rules",
 			}},
 		},
@@ -557,7 +580,7 @@ func (mc *monitorComponent) prometheusServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      PrometheusServiceAccountName,
+			Name:      TigeraPrometheusObjectName,
 			Namespace: common.TigeraPrometheusNamespace,
 		},
 	}
@@ -607,7 +630,7 @@ func (mc *monitorComponent) prometheusClusterRole() *rbacv1.ClusterRole {
 
 	return &rbacv1.ClusterRole{
 		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: PrometheusClusterRoleName},
+		ObjectMeta: metav1.ObjectMeta{Name: TigeraPrometheusObjectName},
 		Rules:      rules,
 	}
 }
@@ -615,18 +638,18 @@ func (mc *monitorComponent) prometheusClusterRole() *rbacv1.ClusterRole {
 func (mc *monitorComponent) prometheusClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: PrometheusClusterRoleName},
+		ObjectMeta: metav1.ObjectMeta{Name: TigeraPrometheusObjectName},
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      PrometheusServiceAccountName,
+				Name:      TigeraPrometheusObjectName,
 				Namespace: common.TigeraPrometheusNamespace,
 			},
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     PrometheusClusterRoleName,
+			Name:     TigeraPrometheusObjectName,
 		},
 	}
 }
@@ -668,7 +691,7 @@ func (mc *monitorComponent) prometheusServiceClusterRoleBinding() client.Object 
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      PrometheusServiceAccountName,
+				Name:      TigeraPrometheusObjectName,
 				Namespace: common.TigeraPrometheusNamespace,
 			},
 		},
@@ -683,7 +706,7 @@ func (mc *monitorComponent) prometheusServiceService() *corev1.Service {
 			APIVersion: "v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      PrometheusServiceServiceName,
+			Name:      TigeraPrometheusObjectName,
 			Namespace: common.TigeraPrometheusNamespace,
 			Labels: map[string]string{
 				"k8s-app": TigeraPrometheusObjectName,
@@ -700,10 +723,16 @@ func (mc *monitorComponent) prometheusServiceService() *corev1.Service {
 				},
 			},
 			Selector: map[string]string{
-				"prometheus": calicoNodePrometheusServiceName,
+				"prometheus": TigeraPrometheusObjectName,
 			},
 		},
 	}
+}
+
+func (mc *monitorComponent) prometheusServiceServiceLegacy() *corev1.Service {
+	svc := mc.prometheusServiceService()
+	svc.Name = "prometheus-http-api"
+	return svc
 }
 
 func (mc *monitorComponent) prometheusRule() *monitoringv1.PrometheusRule {
@@ -713,7 +742,7 @@ func (mc *monitorComponent) prometheusRule() *monitoringv1.PrometheusRule {
 			Name:      TigeraPrometheusDPRate,
 			Namespace: common.TigeraPrometheusNamespace,
 			Labels: map[string]string{
-				"prometheus": CalicoNodePrometheus,
+				"prometheus": TigeraPrometheusObjectName,
 				"role":       "tigera-prometheus-rules",
 			},
 		},
@@ -724,7 +753,7 @@ func (mc *monitorComponent) prometheusRule() *monitoringv1.PrometheusRule {
 					Rules: []monitoringv1.Rule{
 						{
 							Alert:  "DeniedPacketsRate",
-							Expr:   intstr.FromString("rate(calico_denied_packets[10s]) > 50"),
+							Expr:   intstr.FromString("rate(cnx_policy_rule_bytes[10s]) > 1"), //todo: revert
 							Labels: map[string]string{"severity": "critical"},
 							Annotations: map[string]string{
 								"summary":     "Instance {{$labels.instance}} - Large rate of packets denied",
@@ -888,7 +917,7 @@ func (mc *monitorComponent) operatorRole() *rbacv1.Role {
 	return &rbacv1.Role{
 		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      TigeraPrometheusRole,
+			Name:      TigeraPrometheusOperatorRole,
 			Namespace: common.TigeraPrometheusNamespace,
 		},
 		Rules: []rbacv1.PolicyRule{
@@ -919,13 +948,13 @@ func (mc *monitorComponent) operatorRoleBinding() *rbacv1.RoleBinding {
 	return &rbacv1.RoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      TigeraPrometheusRoleBinding,
+			Name:      TigeraPrometheusOperatorRoleBinding,
 			Namespace: common.TigeraPrometheusNamespace,
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "Role",
-			Name:     TigeraPrometheusRole,
+			Name:     TigeraPrometheusOperatorRole,
 		},
 		Subjects: []rbacv1.Subject{
 			{
@@ -1193,5 +1222,65 @@ func (mc *monitorComponent) serviceMonitorCalicoKubeControllers() *monitoringv1.
 				},
 			},
 		},
+	}
+}
+
+func (mc *monitorComponent) ExternalPrometheusRole() client.Object {
+	return &rbacv1.Role{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      TigeraPrometheusObjectName,
+			Namespace: mc.cfg.Monitor.ExternalPrometheusConfiguration.Namespace,
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{""},
+				Resources: []string{"services/proxy"},
+				ResourceNames: []string{
+					"https:tigera-api:8080", "calico-node-prometheus:9090",
+				},
+				Verbs: []string{"get", "create"},
+			},
+		},
+	}
+}
+
+func (mc *monitorComponent) ExternalPrometheusRoleBinding() client.Object {
+	return &rbacv1.RoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      TigeraPrometheusObjectName,
+			Namespace: mc.cfg.Monitor.ExternalPrometheusConfiguration.Namespace,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      TigeraPrometheusObjectName,
+				Namespace: mc.cfg.Monitor.ExternalPrometheusConfiguration.Namespace,
+			},
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Role",
+			Name:     TigeraPrometheusObjectName,
+		},
+	}
+}
+
+func (mc *monitorComponent) ExternalPrometheusTokenSecret() client.Object {
+	return &corev1.Secret{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Secret",
+			APIVersion: "v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      TigeraPrometheusObjectName,
+			Namespace: mc.cfg.Monitor.ExternalPrometheusConfiguration.Namespace,
+			// The annotation below will result in the auto-creation of spec.data.token.
+			Annotations: map[string]string{
+				"kubernetes.io/service-account.name": "tigera-prometheus",
+			},
+		},
+		Type: "kubernetes.io/service-account-token",
 	}
 }

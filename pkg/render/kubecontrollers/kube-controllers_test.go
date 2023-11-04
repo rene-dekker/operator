@@ -433,7 +433,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		expectedEnv := []corev1.EnvVar{
 			{Name: "TLS_KEY_PATH", Value: "/calico-kube-controllers-metrics-tls/tls.key"},
 			{Name: "TLS_CRT_PATH", Value: "/calico-kube-controllers-metrics-tls/tls.crt"},
-			{Name: "CLIENT_COMMON_NAME", Value: "calico-node-prometheus-client-tls"},
+			{Name: "CLIENT_COMMON_NAME", Value: "tigera-prometheus-client-tls"},
 			{Name: "CA_CRT_PATH", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
 		}
 		expectedVolumeMounts := []corev1.VolumeMount{

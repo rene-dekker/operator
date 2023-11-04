@@ -9,4 +9,4 @@ route:
 receivers:
 - name: 'webhook'
   webhook_configs:
-  - url: 'http://calico-alertmanager-webhook:30501/'
+  - url: 'http://tigera-alertmanager-webhook:30501/'

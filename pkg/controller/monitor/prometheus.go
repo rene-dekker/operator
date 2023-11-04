@@ -36,14 +36,14 @@ import (
 func addAlertmanagerWatch(c controller.Controller) error {
 	return utils.AddNamespacedWatch(c, &monitoringv1.Alertmanager{
 		TypeMeta:   metav1.TypeMeta{Kind: monitoringv1.AlertmanagersKind, APIVersion: monitor.MonitoringAPIVersion},
-		ObjectMeta: metav1.ObjectMeta{Name: monitor.CalicoNodeAlertmanager, Namespace: common.TigeraPrometheusNamespace},
+		ObjectMeta: metav1.ObjectMeta{Name: monitor.TigeraAlertmanager, Namespace: common.TigeraPrometheusNamespace},
 	}, &handler.EnqueueRequestForObject{})
 }
 
 func addPrometheusWatch(c controller.Controller) error {
 	return utils.AddNamespacedWatch(c, &monitoringv1.Prometheus{
 		TypeMeta:   metav1.TypeMeta{Kind: monitoringv1.PrometheusesKind, APIVersion: monitor.MonitoringAPIVersion},
-		ObjectMeta: metav1.ObjectMeta{Name: monitor.CalicoNodePrometheus, Namespace: common.TigeraPrometheusNamespace},
+		ObjectMeta: metav1.ObjectMeta{Name: monitor.TigeraPrometheusObjectName, Namespace: common.TigeraPrometheusNamespace},
 	}, &handler.EnqueueRequestForObject{})
 }
 

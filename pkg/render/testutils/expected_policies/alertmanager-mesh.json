@@ -2,13 +2,13 @@
   "apiVersion": "projectcalico.org/v3",
   "kind": "NetworkPolicy",
   "metadata": {
-    "name": "allow-tigera.calico-node-alertmanager-mesh",
+    "name": "allow-tigera.tigera-alertmanager-mesh",
     "namespace": "tigera-prometheus"
   },
   "spec": {
     "order": 1,
     "tier": "allow-tigera",
-    "selector": "(app == 'alertmanager' && alertmanager == 'calico-node-alertmanager') || (app.kubernetes.io/name == 'alertmanager' && alertmanager == 'calico-node-alertmanager')",
+    "selector": "(app == 'alertmanager' && alertmanager == 'tigera-alertmanager') || (app.kubernetes.io/name == 'alertmanager' && alertmanager == 'tigera-alertmanager')",
     "types": [
       "Ingress",
       "Egress"
@@ -18,7 +18,7 @@
         "action": "Allow",
         "protocol": "TCP",
         "destination": {
-          "selector": "(app == 'alertmanager' && alertmanager == 'calico-node-alertmanager') || (app.kubernetes.io/name == 'alertmanager' && alertmanager == 'calico-node-alertmanager')",
+          "selector": "(app == 'alertmanager' && alertmanager == 'tigera-alertmanager') || (app.kubernetes.io/name == 'alertmanager' && alertmanager == 'tigera-alertmanager')",
           "ports": [
             9094
           ]
@@ -28,7 +28,7 @@
         "action": "Allow",
         "protocol": "UDP",
         "destination": {
-          "selector": "(app == 'alertmanager' && alertmanager == 'calico-node-alertmanager') || (app.kubernetes.io/name == 'alertmanager' && alertmanager == 'calico-node-alertmanager')",
+          "selector": "(app == 'alertmanager' && alertmanager == 'tigera-alertmanager') || (app.kubernetes.io/name == 'alertmanager' && alertmanager == 'tigera-alertmanager')",
           "ports": [
             9094
           ]
@@ -40,7 +40,7 @@
         "action": "Allow",
         "protocol": "TCP",
         "destination": {
-          "selector": "(app == 'alertmanager' && alertmanager == 'calico-node-alertmanager') || (app.kubernetes.io/name == 'alertmanager' && alertmanager == 'calico-node-alertmanager')",
+          "selector": "(app == 'alertmanager' && alertmanager == 'tigera-alertmanager') || (app.kubernetes.io/name == 'alertmanager' && alertmanager == 'tigera-alertmanager')",
           "ports": [
             9094
           ]
@@ -50,7 +50,7 @@
         "action": "Allow",
         "protocol": "UDP",
         "destination": {
-          "selector": "(app == 'alertmanager' && alertmanager == 'calico-node-alertmanager') || (app.kubernetes.io/name == 'alertmanager' && alertmanager == 'calico-node-alertmanager')",
+          "selector": "(app == 'alertmanager' && alertmanager == 'tigera-alertmanager') || (app.kubernetes.io/name == 'alertmanager' && alertmanager == 'tigera-alertmanager')",
           "ports": [
             9094
           ]

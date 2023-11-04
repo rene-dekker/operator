@@ -134,8 +134,8 @@ var _ = Describe("Monitor controller tests", func() {
 
 		BeforeEach(func() {
 			// Prometheus related objects should not exist.
-			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodeAlertmanager, Namespace: common.TigeraPrometheusNamespace}, am)).To(HaveOccurred())
-			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodePrometheus, Namespace: common.TigeraPrometheusNamespace}, p)).To(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.TigeraAlertmanager, Namespace: common.TigeraPrometheusNamespace}, am)).To(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.TigeraPrometheusObjectName, Namespace: common.TigeraPrometheusNamespace}, p)).To(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.TigeraPrometheusDPRate, Namespace: common.TigeraPrometheusNamespace}, pr)).To(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodeMonitor, Namespace: common.TigeraPrometheusNamespace}, sm)).To(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.ElasticsearchMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).To(HaveOccurred())
@@ -147,8 +147,8 @@ var _ = Describe("Monitor controller tests", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Prometheus related objects should be rendered after reconciliation.
-			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodeAlertmanager, Namespace: common.TigeraPrometheusNamespace}, am)).NotTo(HaveOccurred())
-			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodePrometheus, Namespace: common.TigeraPrometheusNamespace}, p)).NotTo(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.TigeraAlertmanager, Namespace: common.TigeraPrometheusNamespace}, am)).NotTo(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.TigeraPrometheusObjectName, Namespace: common.TigeraPrometheusNamespace}, p)).NotTo(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.TigeraPrometheusDPRate, Namespace: common.TigeraPrometheusNamespace}, pr)).NotTo(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodeMonitor, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.ElasticsearchMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
@@ -162,8 +162,8 @@ var _ = Describe("Monitor controller tests", func() {
 			policies := v3.NetworkPolicyList{}
 			Expect(cli.List(ctx, &policies)).ToNot(HaveOccurred())
 			Expect(policies.Items).To(HaveLen(6))
-			Expect(policies.Items[0].Name).To(Equal("allow-tigera.calico-node-alertmanager"))
-			Expect(policies.Items[1].Name).To(Equal("allow-tigera.calico-node-alertmanager-mesh"))
+			Expect(policies.Items[0].Name).To(Equal("allow-tigera.tigera-alertmanager"))
+			Expect(policies.Items[1].Name).To(Equal("allow-tigera.tigera-alertmanager-mesh"))
 			Expect(policies.Items[2].Name).To(Equal("allow-tigera.default-deny"))
 			Expect(policies.Items[3].Name).To(Equal("allow-tigera.prometheus"))
 			Expect(policies.Items[4].Name).To(Equal("allow-tigera.prometheus-operator"))

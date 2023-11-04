@@ -156,7 +156,7 @@ var (
 	}
 
 	ComponentManager = component{
-		Version:  "master",
+		Version:  "v3.18.0-1.1",
 		Image:    "tigera/cnx-manager",
 		Registry: "",
 	}
@@ -210,12 +210,12 @@ var (
 	}
 
 	ComponentCoreOSPrometheus = component{
-		Version:  "v2.43.1",
+		Version:  "v2.45.0",
 		Registry: "",
 	}
 
 	ComponentPrometheus = component{
-		Version:  "master",
+		Version:  "v3.18.0-1.1",
 		Image:    "tigera/prometheus",
 		Registry: "",
 	}
@@ -227,12 +227,12 @@ var (
 	}
 
 	ComponentCoreOSAlertmanager = component{
-		Version:  "v0.25.0",
+		Version:  "v0.25.1",
 		Registry: "",
 	}
 
 	ComponentPrometheusAlertmanager = component{
-		Version:  "master",
+		Version:  "v3.18.0-1.1",
 		Image:    "tigera/alertmanager",
 		Registry: "",
 	}
