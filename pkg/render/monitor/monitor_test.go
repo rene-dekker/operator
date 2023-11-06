@@ -752,7 +752,7 @@ var _ = Describe("monitor rendering tests", func() {
 				return testutils.SelectPolicyByProvider(scenario, expectedAlertmanagerMeshPolicy, expectedAlertmanagerMeshPolicyForOpenshift)
 			} else if name.Name == "allow-tigera.prometheus" {
 				return testutils.SelectPolicyByProvider(scenario, expectedPrometheusPolicy, expectedPrometheusPolicyForOpenshift)
-			} else if name.Name == "allow-tigera.tigera-prometheus-api" {
+			} else if name.Name == "allow-tigera.tigera-prometheus" {
 				return testutils.SelectPolicyByProvider(scenario, expectedPrometheusApiPolicy, expectedPrometheusApiPolicyForOpenshift)
 			} else if name.Name == "allow-tigera.prometheus-operator" {
 				return testutils.SelectPolicyByProvider(scenario, expectedPrometheusOperatorPolicy, expectedPrometheusOperatorPolicyOpenshift)

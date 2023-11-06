@@ -2,13 +2,13 @@
   "apiVersion": "projectcalico.org/v3",
   "kind": "NetworkPolicy",
   "metadata": {
-    "name": "allow-tigera.tigera-prometheus-api",
+    "name": "allow-tigera.tigera-prometheus",
     "namespace": "tigera-prometheus"
   },
   "spec": {
     "order": 1,
     "tier": "allow-tigera",
-    "selector": "k8s-app == 'tigera-prometheus-api'",
+    "selector": "k8s-app == 'tigera-prometheus'",
     "types": [
       "Ingress",
       "Egress"

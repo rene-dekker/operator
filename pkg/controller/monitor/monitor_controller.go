@@ -84,7 +84,6 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	policyNames := []types.NamespacedName{
 		{Name: monitor.PrometheusPolicyName, Namespace: common.TigeraPrometheusNamespace},
-		{Name: monitor.PrometheusAPIPolicyName, Namespace: common.TigeraPrometheusNamespace},
 		{Name: monitor.PrometheusOperatorPolicyName, Namespace: common.TigeraPrometheusNamespace},
 		{Name: monitor.AlertManagerPolicyName, Namespace: common.TigeraPrometheusNamespace},
 		{Name: monitor.MeshAlertManagerPolicyName, Namespace: common.TigeraPrometheusNamespace},
@@ -235,7 +234,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 	// Patch the monitor resource with defaults added.
-	if err := r.client.Patch(ctx, instance, preDefaultPatchFrom); err != nil {
+	if err = r.client.Patch(ctx, instance.DeepCopy(), preDefaultPatchFrom); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to write defaults", err, reqLogger)
 		return reconcile.Result{}, err
 	}
@@ -408,7 +407,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	for _, component := range components {
-		if err := hdler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
+		if err = hdler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 			return reconcile.Result{}, err
 		}
@@ -453,9 +452,11 @@ func fillDefaults(instance *operatorv1.Monitor) {
 		return
 	}
 	if instance.Spec.ExternalPrometheusConfiguration.ServiceMonitor.ObjectMeta.Namespace == "" {
-		instance.Spec.ExternalPrometheusConfiguration.ServiceMonitor.Namespace = instance.Spec.ExternalPrometheusConfiguration.Namespace
+		//instance.Spec.ExternalPrometheusConfiguration.ServiceMonitor.Namespace = instance.Spec.ExternalPrometheusConfiguration.Namespace
+		instance.Spec.ExternalPrometheusConfiguration.ServiceMonitor.ObjectMeta.Namespace = instance.Spec.ExternalPrometheusConfiguration.Namespace
 	}
 	if instance.Spec.ExternalPrometheusConfiguration.ServiceMonitor.ObjectMeta.Name == "" {
+		//instance.Spec.ExternalPrometheusConfiguration.ServiceMonitor.Name = "tigera-prometheus"
 		instance.Spec.ExternalPrometheusConfiguration.ServiceMonitor.ObjectMeta.Name = "tigera-prometheus"
 	}
 	if len(instance.Spec.ExternalPrometheusConfiguration.ServiceMonitor.Spec.Endpoints) == 0 {
@@ -504,10 +505,7 @@ func fillDefaults(instance *operatorv1.Monitor) {
 		},
 	}
 
-	instance.Spec.ExternalPrometheusConfiguration.ServiceMonitor.ObjectMeta = metav1.ObjectMeta{
-		Name:   "tigera-prometheus",
-		Labels: map[string]string{"app": "tigera-prometheus"},
-	}
+	instance.Spec.ExternalPrometheusConfiguration.ServiceMonitor.ObjectMeta.Labels = map[string]string{"app": "byo-prometheus"} //todo: remove this test code.
 	return
 }
 

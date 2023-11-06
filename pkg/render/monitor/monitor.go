@@ -63,8 +63,6 @@ const (
 	TigeraPrometheusOperatorRoleBinding   = "tigera-prometheus-operator"
 	TigeraPrometheusPodSecurityPolicyName = "tigera-prometheus"
 
-	PrometheusAPIPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "tigera-prometheus-api"
-
 	// PrometheusClientTLSSecretName is the TLS secret used when tigera-prometheus is acting as a client and scrapes the
 	// metrics endpoint of other services.
 	PrometheusClientTLSSecretName = "tigera-prometheus-client-tls"
@@ -111,7 +109,6 @@ func MonitorPolicy(cfg *Config) render.Component {
 		allowTigeraAlertManagerPolicy(cfg),
 		allowTigeraAlertManagerMeshPolicy(cfg),
 		allowTigeraPrometheusPolicy(cfg),
-		allowTigeraPrometheusAPIPolicy(cfg),
 		allowTigeraPrometheusOperatorPolicy(cfg),
 		networkpolicy.AllowTigeraDefaultDeny(common.TigeraPrometheusNamespace),
 	)
@@ -1124,41 +1121,6 @@ func allowTigeraPrometheusPolicy(cfg *Config) *v3.NetworkPolicy {
 			Order:    &networkpolicy.HighPrecedenceOrder,
 			Tier:     networkpolicy.TigeraComponentTierName,
 			Selector: networkpolicy.PrometheusSelector,
-			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
-			Ingress: []v3.Rule{
-				{
-					Action:   v3.Allow,
-					Protocol: &networkpolicy.TCPProtocol,
-					Destination: v3.EntityRule{
-						Ports: networkpolicy.Ports(PrometheusProxyPort),
-					},
-				},
-			},
-			Egress: egressRules,
-		},
-	}
-}
-
-// Creates a network policy to allow traffic to access through tigera-prometheus-api
-func allowTigeraPrometheusAPIPolicy(cfg *Config) *v3.NetworkPolicy {
-	egressRules := []v3.Rule{}
-	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.Openshift)
-	egressRules = append(egressRules, v3.Rule{
-		Action:      v3.Allow,
-		Protocol:    &networkpolicy.TCPProtocol,
-		Destination: networkpolicy.PrometheusEntityRule,
-	})
-
-	return &v3.NetworkPolicy{
-		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      PrometheusAPIPolicyName,
-			Namespace: common.TigeraPrometheusNamespace,
-		},
-		Spec: v3.NetworkPolicySpec{
-			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.TigeraComponentTierName,
-			Selector: networkpolicy.KubernetesAppSelector("tigera-prometheus-api"),
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Ingress: []v3.Rule{
 				{
