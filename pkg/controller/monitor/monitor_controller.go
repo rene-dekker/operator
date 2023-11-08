@@ -18,6 +18,7 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"net"
 	"reflect"
 
 	v1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -278,7 +279,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 
 	dnsNames := dns.GetServiceDNSNames(monitor.TigeraPrometheusObjectName, common.TigeraPrometheusNamespace, r.clusterDomain)
 	dnsNames = append(dnsNames, dns.GetServiceDNSNames("prometheus-http-api", common.TigeraPrometheusNamespace, r.clusterDomain)...) // To preserve the legacy dns names for skewed mcm setups.
-	serverTLSSecret, err := certificateManager.GetOrCreateKeyPair(r.client, monitor.PrometheusServerTLSSecretName, common.OperatorNamespace(), dnsNames)
+	serverTLSSecret, err := certificateManager.GetOrCreateKeyPairWithIPAddresses(r.client, monitor.PrometheusServerTLSSecretName, common.OperatorNamespace(), dnsNames, []net.IP{net.IPv4(192, 168, 25, 25)})
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
 		return reconcile.Result{}, err
@@ -468,28 +469,25 @@ func fillDefaults(instance *operatorv1.Monitor) {
 				Params: map[string][]string{
 					"match[]": {"{__name__=~\".+\"}"},
 				},
-				Interval:      "30s",
-				ScrapeTimeout: "",
+				Interval: "30s",
+
 				TLSConfig: &v1.TLSConfig{
 					SafeTLSConfig: v1.SafeTLSConfig{
-						Cert: v1.SecretOrConfigMap{
+						CA: v1.SecretOrConfigMap{
 							Secret: nil,
 							ConfigMap: &corev1.ConfigMapKeySelector{
 								LocalObjectReference: corev1.LocalObjectReference{
 									Name: monitor.TigeraPrometheusObjectName,
 								},
-								Key:      corev1.TLSCertKey,
-								Optional: nil,
+								Key: corev1.TLSCertKey,
 							},
 						},
-						KeySecret:          nil,
-						ServerName:         "",
-						InsecureSkipVerify: false,
+						ServerName: "",
 					},
 				},
 				BearerTokenSecret: corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: monitor.TigeraPrometheusObjectName,
+						Name: monitor.TigeraExternalPrometheus,
 					},
 					Key: "token",
 				},

@@ -19,6 +19,7 @@ package tls
 import (
 	"crypto/x509"
 	"fmt"
+	"net"
 	"time"
 
 	"github.com/openshift/library-go/pkg/crypto"
@@ -37,6 +38,12 @@ func SetServerAuth(x *x509.Certificate) error {
 	}
 	x.ExtKeyUsage = append(x.ExtKeyUsage, x509.ExtKeyUsageServerAuth)
 	return nil
+}
+func SetIPAddressFn(ipAddresses []net.IP) func(x *x509.Certificate) error {
+	return func(x *x509.Certificate) error {
+		x.IPAddresses = ipAddresses
+		return nil
+	}
 }
 
 func MakeCA(signerName string) (*crypto.CA, error) {

@@ -19,6 +19,7 @@ import (
 	"context"
 	"crypto/x509"
 	"fmt"
+	"net"
 	"strings"
 	"time"
 
@@ -78,6 +79,8 @@ type CertificateManager interface {
 	GetKeyPair(cli client.Client, secretName, secretNamespace string, dnsNames []string) (certificatemanagement.KeyPairInterface, error)
 	// GetOrCreateKeyPair returns a KeyPair. If one exists, some checks are performed. Otherwise, a new KeyPair is created.
 	GetOrCreateKeyPair(cli client.Client, secretName, secretNamespace string, dnsNames []string) (certificatemanagement.KeyPairInterface, error)
+	// GetOrCreateKeyPairWithIPAddresses returns a KeyPair. If one exists, some checks are performed. Otherwise, a new KeyPair is created.
+	GetOrCreateKeyPairWithIPAddresses(cli client.Client, secretName, secretNamespace string, dnsNames []string, ipAddresses []net.IP) (certificatemanagement.KeyPairInterface, error)
 	// GetCertificate returns a Certificate. If the certificate is not found, nil is returned.
 	GetCertificate(cli client.Client, secretName, secretNamespace string) (certificatemanagement.CertificateInterface, error)
 	// CreateTrustedBundle creates a TrustedBundle, which provides standardized methods for mounting a bundle of certificates to trust.
@@ -248,6 +251,11 @@ func (cm *certificateManager) AddToStatusManager(statusManager status.StatusMana
 
 // GetOrCreateKeyPair returns a KeyPair. If one exists, some checks are performed. Otherwise, a new KeyPair is created.
 func (cm *certificateManager) GetOrCreateKeyPair(cli client.Client, secretName, secretNamespace string, dnsNames []string) (certificatemanagement.KeyPairInterface, error) {
+	return cm.GetOrCreateKeyPairWithIPAddresses(cli, secretName, secretNamespace, dnsNames, nil)
+}
+
+// GetOrCreateKeyPairWithIPAddresses returns a KeyPair. If one exists, some checks are performed. Otherwise, a new KeyPair is created.
+func (cm *certificateManager) GetOrCreateKeyPairWithIPAddresses(cli client.Client, secretName, secretNamespace string, dnsNames []string, ipAddresses []net.IP) (certificatemanagement.KeyPairInterface, error) {
 	keyPair, x509Cert, err := cm.getKeyPair(cli, secretName, secretNamespace, false, dnsNames)
 	if keyPair != nil && keyPair.UseCertificateManagement() {
 		return certificateManagementKeyPair(cm, secretName, secretNamespace, dnsNames), nil
@@ -267,7 +275,7 @@ func (cm *certificateManager) GetOrCreateKeyPair(cli client.Client, secretName, 
 	}
 
 	// If we reach here, it means we need to create a new KeyPair.
-	tlsCfg, err := cm.MakeServerCertForDuration(sets.NewString(dnsNames...), rmeta.DefaultCertificateDuration, tls.SetServerAuth, tls.SetClientAuth)
+	tlsCfg, err := cm.MakeServerCertForDuration(sets.NewString(dnsNames...), rmeta.DefaultCertificateDuration, tls.SetServerAuth, tls.SetClientAuth, tls.SetIPAddressFn(ipAddresses))
 	if err != nil {
 		return nil, fmt.Errorf("unable to create signed cert pair: %s", err)
 	}
