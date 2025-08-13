@@ -473,6 +473,8 @@ func (mc *monitorComponent) alertmanagerService() *corev1.Service {
 
 func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 	sc := securitycontext.NewNonRootContext()
+	podSc := securitycontext.NewNonRootPodContext()
+	podSc.FSGroup = sc.RunAsGroup
 	var initContainers []corev1.Container
 	if mc.cfg.ServerTLSSecret.UseCertificateManagement() {
 		initContainers = append(initContainers, mc.cfg.ServerTLSSecret.InitContainer(common.TigeraPrometheusNamespace, sc))
@@ -593,7 +595,7 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 				NodeSelector:           mc.cfg.Installation.ControlPlaneNodeSelector,
 				PodMonitorSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"team": "network-operators"}},
 				Resources:              corev1.ResourceRequirements{Requests: corev1.ResourceList{"memory": resource.MustParse("400Mi")}},
-				SecurityContext:        securitycontext.NewNonRootPodContext(),
+				SecurityContext:        podSc,
 				ServiceAccountName:     PrometheusServiceAccountName,
 				ServiceMonitorSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"team": "network-operators"}},
 				Tolerations:            tolerations,
@@ -618,7 +620,16 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 			}},
 		},
 	}
-
+	//if mc.cfg.Monitor.Prometheus.PersistentVolumeClaimSpec.StorageClassName != nil {
+	prometheus.Spec.SecurityContext.FSGroup = sc.RunAsGroup
+	prometheus.Spec.Storage = &monitoringv1.StorageSpec{
+		VolumeClaimTemplate: monitoringv1.EmbeddedPersistentVolumeClaim{
+			TypeMeta:               metav1.TypeMeta{},
+			EmbeddedObjectMetadata: monitoringv1.EmbeddedObjectMetadata{},
+			Spec:                   mc.cfg.Monitor.Prometheus.PersistentVolumeClaimSpec,
+		},
+	}
+	//}
 	if overrides := mc.cfg.Monitor.Prometheus; overrides != nil {
 		rcomponents.ApplyPrometheusOverrides(prometheus, overrides)
 	}

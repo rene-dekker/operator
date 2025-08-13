@@ -1,4 +1,3 @@
-# Components defined here are required to be kept in sync with hack/gen-versions/enterprise.go.tpl
 title: master
 components:
   libcalico-go:
@@ -8,7 +7,7 @@ components:
     version: master
   voltron:
     image: tigera/voltron
-    version: master
+    version: v3.22.0-1.1-calient-0.dev-6-g4b5142d03f48
   apiserver:
     image: tigera/apiserver
     version: master
@@ -20,7 +19,7 @@ components:
     version: master
   typha:
     image: tigera/typha
-    version: master
+    version: v3.22.0-1.1-calient-0.dev-6-g4b5142d03f48
   node:
     image: tigera/node
     version: master
@@ -29,22 +28,22 @@ components:
     version: master
   fluentd:
     image: tigera/fluentd
-    version: master
+    version: v3.22.0-1.1-calient-0.dev-6-g4b5142d03f48
   fluentd-windows:
     image: tigera/fluentd-windows
     version: master
   ui-apis:
     image: tigera/ui-apis
-    version: master
+    version: v3.22.0-1.1-calient-0.dev-6-g4b5142d03f48
   linseed:
     image: tigera/linseed
     version: master
   es-gateway:
     image: tigera/es-gateway
-    version: master
+    version: v3.22.0-1.1-calient-0.dev-6-g4b5142d03f48
   dex:
     image: tigera/dex
-    version: master
+    version: v3.22.0-1.1-calient-0.dev-6-g4b5142d03f48
   eck-kibana:
     version: 8.18.4
   kibana:
@@ -54,22 +53,22 @@ components:
     version: 8.18.4
   elasticsearch:
     image: tigera/elasticsearch
-    version: master
+    version: v3.22.0-1.1-calient-0.dev-6-g4b5142d03f48
   elastic-tsee-installer:
     image: tigera/intrusion-detection-job-installer
-    version: master
+    version: v3.22.0-1.1-calient-0.dev-6-g4b5142d03f48
   es-curator:
     image: tigera/es-curator
     version: master
   intrusion-detection-controller:
     image: tigera/intrusion-detection-controller
-    version: master
+    version: v3.22.0-1.1-calient-0.dev-6-g4b5142d03f48
   waf-http-filter:
     image: tigera/waf-http-filter
     version: master
   webhooks-processor:
     image: tigera/webhooks-processor
-    version: master
+    version: v3.22.0-1.1-calient-0.dev-6-g4b5142d03f48
   compliance-controller:
     image: tigera/compliance-controller
     version: master
@@ -87,36 +86,32 @@ components:
     version: master
   guardian:
     image: tigera/guardian
-    version: master
+    version: v3.22.0-1.1-calient-0.dev-6-g4b5142d03f48
   tigera-cni:
     image: tigera/cni
-    version: master
+    version: v3.22.0-1.1-calient-0.dev-6-g4b5142d03f48
   tigera-cni-windows:
     image: tigera/cni-windows
-    version: master
+    version: v3.22.0-1.1-calient-0.dev-6-g4b5142d03f48
   elasticsearch-metrics:
     image: tigera/elasticsearch-metrics
     version: master
   packetcapture:
     image: tigera/packetcapture
-    version: master
+    version: v3.22.0-1.1-calient-0.dev-6-g4b5142d03f48
   policy-recommendation:
     image: tigera/policy-recommendation
-    version: master
-  # coreos-prometheus holds the version of prometheus built for tigera/prometheus,
-  # which prometheus operator uses to validate.
+    version: v3.22.0-1.1-calient-0.dev-6-g4b5142d03f48
   coreos-prometheus:
     version: v3.4.1
   prometheus:
     image: tigera/prometheus
-    version: master
-  # coreos-prometheus holds the version of alertmanager built for tigera/alertmanager,
-  # which prometheus operator uses to validate.
+    version: v3.22.0-1.1-calient-0.dev-6-g4b5142d03f48
   coreos-alertmanager:
     version: v0.28.0
   alertmanager:
     image: tigera/alertmanager
-    version: master
+    version: v3.22.0-1.1-calient-0.dev-6-g4b5142d03f48
   tigera-prometheus-service:
     image: tigera/prometheus-service
     version: master
@@ -125,44 +120,42 @@ components:
     version: master
   flexvol:
     image: tigera/pod2daemon-flexvol
-    version: master
+    version: v3.22.0-1.1-calient-0.dev-6-g4b5142d03f48
   csi:
     image: tigera/csi
-    version: master
+    version: v3.22.0-1.1-calient-0.dev-6-g4b5142d03f48
   csi-node-driver-registrar:
     image: tigera/node-driver-registrar
-    version: master
-  # The components below are third-party images that have been retagged under
-  # quay.io/tigera so all enterprise images come from the same repository and org.
+    version: v3.22.0-1.1-calient-0.dev-6-g4b5142d03f48
   elasticsearch-operator:
     image: tigera/eck-operator
-    version: master
+    version: v3.22.0-1.1-calient-0.dev-6-g4b5142d03f48
   eck-elasticsearch-operator:
     version: 2.16.0
   l7-collector:
     image: tigera/l7-collector
-    version: master
+    version: v3.22.0-1.1-calient-0.dev-6-g4b5142d03f48
   envoy:
     image: tigera/envoy
     version: master
   dikastes:
     image: tigera/dikastes
-    version: master
+    version: v3.22.0-1.1-calient-0.dev-6-g4b5142d03f48
   l7-admission-controller:
     image: tigera/l7-admission-controller
-    version: master
+    version: v3.22.0-1.1-calient-0.dev-6-g4b5142d03f48
   egress-gateway:
     image: tigera/egress-gateway
     version: master
   key-cert-provisioner:
     image: tigera/key-cert-provisioner
-    version: master
+    version: v3.22.0-1.1-calient-0.dev-6-g4b5142d03f48
   gateway-api-envoy-gateway:
     image: tigera/envoy-gateway
-    version: master
+    version: v3.22.0-1.1-calient-0.dev-6-g4b5142d03f48
   gateway-api-envoy-proxy:
     image: tigera/envoy-proxy
-    version: master
+    version: v3.22.0-1.1-calient-0.dev-6-g4b5142d03f48
   gateway-api-envoy-ratelimit:
     image: tigera/envoy-ratelimit
-    version: master
+    version: v3.22.0-1.1-calient-0.dev-6-g4b5142d03f48

@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2025 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -137,6 +137,8 @@ type Prometheus struct {
 	// Spec is the specification of the Prometheus.
 	// +optional
 	PrometheusSpec *PrometheusSpec `json:"spec,omitempty"`
+
+	PersistentVolumeClaimSpec corev1.PersistentVolumeClaimSpec `json:"persistentVolumeClaimSpec,omitempty"`
 }
 type PrometheusSpec struct {
 	// CommonPrometheusFields are the options available to both the Prometheus server and agent.
