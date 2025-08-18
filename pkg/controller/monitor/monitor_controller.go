@@ -52,7 +52,8 @@ import (
 	rsecret "github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
-	"github.com/tigera/operator/pkg/render/monitor"
+	monitor1 "github.com/tigera/operator/pkg/render/monitor"
+	monitor2 "github.com/tigera/operator/pkg/render/monitor2"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -78,11 +79,11 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	policyNames := []types.NamespacedName{
-		{Name: monitor.PrometheusPolicyName, Namespace: common.TigeraPrometheusNamespace},
-		{Name: monitor.PrometheusAPIPolicyName, Namespace: common.TigeraPrometheusNamespace},
-		{Name: monitor.PrometheusOperatorPolicyName, Namespace: common.TigeraPrometheusNamespace},
-		{Name: monitor.AlertManagerPolicyName, Namespace: common.TigeraPrometheusNamespace},
-		{Name: monitor.MeshAlertManagerPolicyName, Namespace: common.TigeraPrometheusNamespace},
+		{Name: monitor1.PrometheusPolicyName, Namespace: common.TigeraPrometheusNamespace},
+		{Name: monitor1.PrometheusAPIPolicyName, Namespace: common.TigeraPrometheusNamespace},
+		{Name: monitor1.PrometheusOperatorPolicyName, Namespace: common.TigeraPrometheusNamespace},
+		{Name: monitor1.AlertManagerPolicyName, Namespace: common.TigeraPrometheusNamespace},
+		{Name: monitor1.MeshAlertManagerPolicyName, Namespace: common.TigeraPrometheusNamespace},
 		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: common.TigeraPrometheusNamespace},
 	}
 
@@ -109,8 +110,8 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, prometheusReady
 	}
 
 	r.status.AddStatefulSets([]types.NamespacedName{
-		{Namespace: common.TigeraPrometheusNamespace, Name: fmt.Sprintf("alertmanager-%s", monitor.CalicoNodeAlertmanager)},
-		{Namespace: common.TigeraPrometheusNamespace, Name: fmt.Sprintf("prometheus-%s", monitor.CalicoNodePrometheus)},
+		{Namespace: common.TigeraPrometheusNamespace, Name: fmt.Sprintf("alertmanager-%s", monitor1.CalicoNodeAlertmanager)},
+		{Namespace: common.TigeraPrometheusNamespace, Name: fmt.Sprintf("prometheus-%s", monitor1.CalicoNodePrometheus)},
 	})
 
 	r.status.Run(opts.ShutdownContext)
@@ -146,7 +147,7 @@ func add(_ manager.Manager, c ctrlruntime.Controller) error {
 	for _, secret := range []string{
 		certificatemanagement.CASecretName,
 		esmetrics.ElasticsearchMetricsServerTLSSecret,
-		monitor.PrometheusServerTLSSecretName,
+		monitor1.PrometheusServerTLSSecretName,
 		render.FluentdPrometheusTLSSecretName,
 		render.NodePrometheusTLSServerSecret,
 		kubecontrollers.KubeControllerPrometheusTLSSecret,
@@ -278,7 +279,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	if instance.Spec.ExternalPrometheus == nil || install.CertificateManagement != nil {
 		// We're either not using an external prometheus in which case we simply sign the KeyPair directly using the certificateManager,
 		// or we are configured to use a custom TLS secret, which is also handled under the covers by `GetOrCreateKeyPair`.
-		serverTLSSecret, err = certificateManager.GetOrCreateKeyPair(r.client, monitor.PrometheusServerTLSSecretName, common.OperatorNamespace(), PrometheusTLSServerDNSNames(r.clusterDomain))
+		serverTLSSecret, err = certificateManager.GetOrCreateKeyPair(r.client, monitor1.PrometheusServerTLSSecretName, common.OperatorNamespace(), PrometheusTLSServerDNSNames(r.clusterDomain))
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
 			return reconcile.Result{}, err
@@ -287,10 +288,10 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		// Prometheus requires to have an IP SAN in its certificate, so that it can be scraped by an external prometheus pod.
 		// Since we do not know what IP the pods will have, the pod will issue a CSR on startup for a certificate containing
 		// its own IP. pkg/controller/csr/csr_controller.go will then sign the certificate.
-		serverTLSSecret = certificateManager.CreateCSRKeyPair(monitor.PrometheusServerTLSSecretName, common.OperatorNamespace(), PrometheusTLSServerDNSNames(r.clusterDomain))
+		serverTLSSecret = certificateManager.CreateCSRKeyPair(monitor1.PrometheusServerTLSSecretName, common.OperatorNamespace(), PrometheusTLSServerDNSNames(r.clusterDomain))
 	}
 
-	clientTLSSecret, err := certificateManager.GetOrCreateKeyPair(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusClientTLSSecretName})
+	clientTLSSecret, err := certificateManager.GetOrCreateKeyPair(r.client, monitor1.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor1.PrometheusClientTLSSecretName})
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
 		return reconcile.Result{}, err
@@ -377,7 +378,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	monitorCfg := &monitor.Config{
+	monitorCfg := &monitor2.Config{
 		Monitor:                       instance.Spec,
 		Installation:                  install,
 		PullSecrets:                   pullSecrets,
@@ -394,10 +395,10 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 
 	// Render prometheus component
 	components := []render.Component{
-		monitor.Monitor(monitorCfg),
+		monitor2.Monitor(monitorCfg),
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 			Namespace:       common.TigeraPrometheusNamespace,
-			ServiceAccounts: []string{monitor.PrometheusServiceAccountName},
+			ServiceAccounts: []string{monitor1.PrometheusServiceAccountName},
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				rcertificatemanagement.NewKeyPairOption(serverTLSSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(clientTLSSecret, true, true),
@@ -415,7 +416,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	// unavailable and reconciliation of non-NetworkPolicy resources in the monitor controller would resolve it, we
 	// render network policies last to prevent a chicken-and-egg scenario.
 	if includeV3NetworkPolicy {
-		components = append(components, monitor.MonitorPolicy(monitorCfg))
+		components = append(components, monitor2.MonitorPolicy(monitorCfg))
 	}
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, components...); err != nil {
@@ -454,7 +455,7 @@ func fillDefaults(instance *operatorv1.Monitor) {
 
 		if len(instance.Spec.ExternalPrometheus.ServiceMonitor.Labels) == 0 {
 			instance.Spec.ExternalPrometheus.ServiceMonitor.Labels = map[string]string{
-				render.AppLabelName: monitor.TigeraExternalPrometheus,
+				render.AppLabelName: monitor1.TigeraExternalPrometheus,
 			}
 		}
 
@@ -470,7 +471,7 @@ func fillDefaults(instance *operatorv1.Monitor) {
 			if ep.BearerTokenSecret.Key == "" || ep.BearerTokenSecret.Name == "" {
 				ep.BearerTokenSecret = corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: monitor.TigeraExternalPrometheus,
+						Name: monitor1.TigeraExternalPrometheus,
 					},
 					Key: "token",
 				}
@@ -482,7 +483,7 @@ func fillDefaults(instance *operatorv1.Monitor) {
 
 // PrometheusTLSServerDNSNames returns all the DNS names valid for the prometheus server TLS asset.
 func PrometheusTLSServerDNSNames(clusterDomain string) []string {
-	return dns.GetServiceDNSNames(monitor.PrometheusServiceServiceName, common.TigeraPrometheusNamespace, clusterDomain)
+	return dns.GetServiceDNSNames(monitor1.PrometheusServiceServiceName, common.TigeraPrometheusNamespace, clusterDomain)
 }
 
 //go:embed alertmanager-config.yaml
@@ -513,7 +514,7 @@ func (r *ReconcileMonitor) readAlertmanagerConfigSecret(ctx context.Context) (*c
 	defaultConfigSecret := &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      monitor.AlertmanagerConfigSecret,
+			Name:      monitor1.AlertmanagerConfigSecret,
 			Namespace: common.OperatorNamespace(),
 		},
 		Data: map[string][]byte{
@@ -522,7 +523,7 @@ func (r *ReconcileMonitor) readAlertmanagerConfigSecret(ctx context.Context) (*c
 	}
 
 	// Read Alertmanager configuration secret as-is if it is found in the tigera-operator namespace.
-	secret, err := utils.GetSecret(ctx, r.client, monitor.AlertmanagerConfigSecret, common.OperatorNamespace())
+	secret, err := utils.GetSecret(ctx, r.client, monitor1.AlertmanagerConfigSecret, common.OperatorNamespace())
 	if err != nil {
 		return nil, false, err
 	} else if secret != nil {
@@ -531,7 +532,7 @@ func (r *ReconcileMonitor) readAlertmanagerConfigSecret(ctx context.Context) (*c
 
 	// When Alertmanager configuration isn't found in the tigera-operator namespace, copy it from the tigera-prometheus namespace (upgrade).
 	// If it is modified by the user, Monitor controller will not set the owner reference.
-	secret, err = utils.GetSecret(ctx, r.client, monitor.AlertmanagerConfigSecret, common.TigeraPrometheusNamespace)
+	secret, err = utils.GetSecret(ctx, r.client, monitor1.AlertmanagerConfigSecret, common.TigeraPrometheusNamespace)
 	if err != nil {
 		return nil, false, err
 	} else if secret != nil {
