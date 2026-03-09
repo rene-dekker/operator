@@ -1,0 +1,36 @@
+version: v1.0
+name: Update Generated Files
+
+execution_time_limit:
+  hours: 1
+
+agent:
+  machine:
+    type: f1-standard-2
+    os_image: ubuntu2404
+
+global_job_config:
+  secrets:
+  - name: docker-hub
+  - name: private-repo
+  - name: marvin-github-token
+  prologue:
+    commands:
+      - echo $DOCKERHUB_PASSWORD | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
+      - chmod 0600 ~/.keys/*
+      - ssh-add ~/.keys/*
+      - sudo rm -rf ~/.kiex ~/.phpbrew ~/.rbenv ~/.nvm ~/.kerl
+      - checkout
+
+blocks:
+  - name: 'Update Generated Files'
+    task:
+      jobs:
+        - name: Regenerate and open PR
+          execution_time_limit:
+            minutes: 30
+          env_vars:
+            - name: GITHUB_TOKEN
+              value: ${MARVIN_GITHUB_TOKEN}
+          commands:
+            - .semaphore/scripts/update-gen-files.sh

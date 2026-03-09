@@ -186,6 +186,10 @@ promotions:
     # Don't auto promote if this is master or a release branch so the cache is available for the Push Images pipeline.
     auto_promote:
       when: "(branch !~ 'master|release-.*') OR (result != 'passed')"
+  - name: Update Generated Files
+    # Intended to be triggered by a scheduled build on master.
+    # Can also be promoted manually.
+    pipeline_file: update-gen-files.yml
   - name: Clear Cache
     # Never auto promote this, this is only to give an easy way for people to clear the cache.
     pipeline_file: clear_cache.yml
